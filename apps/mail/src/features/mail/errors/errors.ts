@@ -1,0 +1,43 @@
+import { Data } from 'effect';
+
+export class UnknownAccountError extends Data.TaggedError(
+  'UnknownAccountError',
+)<{
+  readonly email: string;
+  readonly message: string;
+}> {}
+
+export class MissingPasswordError extends Data.TaggedError(
+  'MissingPasswordError',
+)<{
+  readonly account: string;
+  readonly message: string;
+}> {}
+
+export class KeyringError extends Data.TaggedError('KeyringError')<{
+  readonly message: string;
+}> {}
+
+export class ImapError extends Data.TaggedError('ImapError')<{
+  readonly message: string;
+}> {}
+
+export class MessageNotFoundError extends Data.TaggedError(
+  'MessageNotFoundError',
+)<{
+  readonly folder: string;
+  readonly uid: number;
+  readonly message: string;
+}> {}
+
+export class DraftError extends Data.TaggedError('DraftError')<{
+  readonly message: string;
+}> {}
+
+export type MailError =
+  | UnknownAccountError
+  | MissingPasswordError
+  | KeyringError
+  | ImapError
+  | MessageNotFoundError
+  | DraftError;

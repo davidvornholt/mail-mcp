@@ -1,0 +1,7 @@
+{
+  "extends": "@davidvornholt/typescript-config/base",
+  "compilerOptions": {
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.next/
+.turbo/
+*.log
+
+# Local secrets: decrypted SOPS output must never be committed.
+secrets/*.yaml
+!secrets/*.example.yaml

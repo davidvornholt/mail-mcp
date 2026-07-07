@@ -1,0 +1,38 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.1/schema.json",
+  // Repo-owned wrapper. Extends the canonical strict base synced from
+  // davidvornholt/standards. Add project-specific overrides here; never edit
+  // biome.base.jsonc locally.
+  "extends": ["./biome.base.jsonc"],
+  "javascript": {
+    "globals": ["Bun"]
+  },
+  "overrides": [
+    {
+      // Terminal boundary: the hidden-input password prompt is the one place
+      // that needs Node's process/tty raw-mode APIs to disable echo. App code
+      // otherwise must not import Node built-ins.
+      "includes": ["apps/mail/src/shared/terminal.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "off"
+          }
+        }
+      }
+    },
+    {
+      // The MCP SDK exposes its entrypoints through a package.json "exports" map
+      // with .js subpaths that Biome's module resolver does not follow; tsc and
+      // Bun both resolve them correctly.
+      "includes": ["apps/mail/src/app/server.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUnresolvedImports": "off"
+          }
+        }
+      }
+    }
+  ]
+}
