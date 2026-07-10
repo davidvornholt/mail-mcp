@@ -1,5 +1,9 @@
 import { Data } from 'effect';
 
+export class ConfigError extends Data.TaggedError('ConfigError')<{
+  readonly message: string;
+}> {}
+
 export class UnknownAccountError extends Data.TaggedError(
   'UnknownAccountError',
 )<{
@@ -35,6 +39,7 @@ export class DraftError extends Data.TaggedError('DraftError')<{
 }> {}
 
 export type MailError =
+  | ConfigError
   | UnknownAccountError
   | MissingPasswordError
   | KeyringError

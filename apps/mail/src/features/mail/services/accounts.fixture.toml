@@ -1,0 +1,9 @@
+# Fixture consumed by config.test.ts via MAIL_ACCOUNTS_CONFIG.
+
+[[accounts]]
+email  = "test@example.com"
+name   = "Test Account"
+host   = "imap.test.example"
+port   = 993
+secure = true
+user   = "test@example.com"

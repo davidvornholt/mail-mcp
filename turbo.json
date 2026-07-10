@@ -1,6 +1,7 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "globalDependencies": ["biome.jsonc", "biome.base.jsonc"],
+  "globalPassThroughEnv": ["MAIL_ACCOUNTS_CONFIG"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

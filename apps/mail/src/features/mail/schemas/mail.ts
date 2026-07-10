@@ -49,3 +49,17 @@ export type DraftInput = {
 };
 
 export const defaultSearchLimit = 20;
+
+export type AccountStatusState =
+  | 'authenticated'
+  | 'password-stored'
+  | 'no-password'
+  | 'unauthenticated'
+  | 'error';
+
+export type AccountStatus = {
+  readonly email: string;
+  readonly ok: boolean;
+  readonly state: AccountStatusState;
+  readonly message: string;
+};

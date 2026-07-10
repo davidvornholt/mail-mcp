@@ -3,22 +3,26 @@ import { Effect } from 'effect';
 import { UnknownAccountError } from '../errors/errors';
 import { MailConfig } from './config';
 
+Bun.env.MAIL_ACCOUNTS_CONFIG = Bun.fileURLToPath(
+  new URL('./accounts.fixture.toml', import.meta.url),
+);
+
 const getAccount = (email: string) =>
   Effect.gen(function* () {
     const config = yield* MailConfig;
     return yield* config.getAccount(email);
   });
 
-describe('MailConfig.getAccount', () => {
-  it('resolves a configured account', () => {
-    const account = Effect.runSync(
-      Effect.provide(getAccount('user1@example.com'), MailConfig.Default),
+describe('MailConfig', () => {
+  it('loads and resolves an account from the configured TOML file', async () => {
+    const account = await Effect.runPromise(
+      Effect.provide(getAccount('test@example.com'), MailConfig.Default),
     );
-    expect(account.email).toBe('user1@example.com');
+    expect(account.host).toBe('imap.test.example');
   });
 
-  it('fails with UnknownAccountError for an unknown account', () => {
-    const error = Effect.runSync(
+  it('fails with UnknownAccountError for an unknown account', async () => {
+    const error = await Effect.runPromise(
       Effect.provide(
         getAccount('nobody@example.com').pipe(Effect.flip),
         MailConfig.Default,

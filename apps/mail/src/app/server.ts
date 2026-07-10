@@ -1,15 +1,28 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { Effect, ManagedRuntime } from 'effect';
+import { Effect, Layer, ManagedRuntime } from 'effect';
 import { z } from 'zod';
 import type { MailError } from '../features/mail/errors/errors';
-import { accountEmails } from '../features/mail/schemas/account';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
+import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
+import { Secrets } from '../features/mail/services/secrets';
+import { checkAccounts } from '../features/mail/services/status';
+
+type ToolEnv = Imap | Secrets | MailConfig;
 
 // One managed runtime for the process keeps IMAP connections warm across tool
 // calls; the Imap layer's finalizer closes them if the runtime is disposed.
-const runtime = ManagedRuntime.make(Imap.Default);
+// MailConfig and Secrets are merged in for the account list and status checks.
+const runtime = ManagedRuntime.make(
+  Layer.mergeAll(MailConfig.Default, Secrets.Default, Imap.Default),
+);
+
+// Load the account list once at startup; a config-load failure rejects here and
+// exits the server with the ConfigError message on stderr.
+const accountEmails = await runtime.runPromise(
+  Effect.map(MailConfig, (config) => config.emails),
+);
 const accountList = accountEmails.join(', ');
 
 const textResult = (text: string, isError = false) => ({
@@ -17,7 +30,7 @@ const textResult = (text: string, isError = false) => ({
   ...(isError ? { isError: true } : {}),
 });
 
-const runTool = <A>(program: Effect.Effect<A, MailError, Imap>) =>
+const runTool = <A>(program: Effect.Effect<A, MailError, ToolEnv>) =>
   runtime.runPromise(
     program.pipe(
       Effect.map((value) => textResult(JSON.stringify(value, null, 2))),
@@ -34,6 +47,23 @@ server.tool(
   'List the configured email accounts you can act on.',
   {},
   () => Promise.resolve(textResult(JSON.stringify(accountEmails, null, 2))),
+);
+
+server.tool(
+  'check_accounts',
+  `Report each account's auth state: 'authenticated' (works), 'no-password' (needs 'mail login'), or 'unauthenticated' (wrong password or IMAP config). Pass an account to check one, or quick=true for a keyring-only check that skips connecting. Accounts: ${accountList}`,
+  { account: z.string().optional(), quick: z.boolean().optional() },
+  ({ account, quick }) =>
+    runTool(
+      Effect.gen(function* () {
+        const config = yield* MailConfig;
+        const emails =
+          account === undefined
+            ? config.emails
+            : [(yield* config.getAccount(account)).email];
+        return yield* checkAccounts(emails, { verify: quick !== true });
+      }),
+    ),
 );
 
 server.tool(

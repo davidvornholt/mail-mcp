@@ -12,6 +12,7 @@ It can `search`, `read`, and `save-draft` only. There is **no send and no delete
 ```bash
 mail login <email>                     # store a password in the OS keyring (hidden prompt)
 mail accounts                          # list configured accounts
+mail status [email] [--quick]          # check auth per account (--quick: keyring only, no connect)
 mail folders <email>                   # list folders
 mail search <email> <query...>         # search, newest first
 mail read <email> <folder> <uid>       # print one message
@@ -22,11 +23,13 @@ Run the MCP server with `bun run src/app/server.ts` (see the repo root README fo
 
 ## Configuration
 
-Non-secret account configuration lives in `src/features/mail/schemas/account.ts` (email, display name, IMAP host, port, TLS, login user). It was derived from Thunderbird's `prefs.js`. Add or change accounts by editing that file.
+Non-secret account configuration lives in `accounts.toml` (email, display name, IMAP host, port, TLS, login user), one `[[accounts]]` block per account. Copy `accounts.example.toml` to `accounts.toml` and edit it; the file is git-ignored so real addresses stay out of git. `MailConfig` loads and zod-validates it at startup, so a missing or malformed file fails loudly with an actionable message. The initial accounts were derived from Thunderbird's `prefs.js`.
 
 | Value | Required | Behavior |
 | --- | --- | --- |
-| account host / port / secure / user | yes | IMAP connection settings per account. Port 993 + `secure: true` (implicit TLS) for all current accounts. |
+| `accounts.toml` | yes | Account inventory. Must declare at least one account; each needs `email`, `name`, `host`, `port`, `secure`, `user`. |
+| account host / port / secure / user | yes | IMAP connection settings per account. Port 993 + `secure = true` (implicit TLS) for all current accounts. |
+| `MAIL_ACCOUNTS_CONFIG` | no | Absolute path to an alternate accounts TOML file. Defaults to `accounts.toml` at the app root. |
 
 ## Secrets
 

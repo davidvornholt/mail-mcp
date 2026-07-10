@@ -1,0 +1,19 @@
+# mail-mcp account inventory (non-secret).
+#
+# Copy this file to `accounts.toml` and fill in your real accounts, then run
+# `mail login <email>` for each. Passwords are NOT stored here — they live in the
+# OS keyring (see src/features/mail/services/secrets.ts). `accounts.toml` is
+# git-ignored, so your addresses never land in git.
+#
+# Each account mirrors a Thunderbird IMAP account. Thunderbird socketType 3
+# (implicit TLS) maps to `secure = true` on port 993.
+#
+# Point the loader at a different file with the MAIL_ACCOUNTS_CONFIG env var.
+
+[[accounts]]
+email  = "you@example.com"   # address you pass to the CLI / MCP tools
+name   = "Your Name"         # display name used on drafts
+host   = "imap.example.com"  # IMAP server host
+port   = 993                 # IMAP port (993 = implicit TLS)
+secure = true                # implicit TLS
+user   = "you@example.com"   # IMAP login user (often the same as email)

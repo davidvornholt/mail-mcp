@@ -1,24 +1,28 @@
+#!/usr/bin/env bun
 import { Console, Effect } from 'effect';
 import type { MailError } from '../features/mail/errors/errors';
-import { accountEmails, findAccount } from '../features/mail/schemas/account';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
+import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
 import { Secrets } from '../features/mail/services/secrets';
+import { checkAccounts } from '../features/mail/services/status';
 import { at, parseFlags } from '../shared/args';
 import { promptHidden } from '../shared/terminal';
 import { appLayer } from './runtime';
+
+type Env = Imap | Secrets | MailConfig;
 
 const cliArgs: ReadonlyArray<string> = Bun.argv.slice(2);
 const command: string = at(cliArgs, 0) ?? '';
 const account = at(cliArgs, 1);
 const tail = cliArgs.slice(2);
-const knownAccounts = accountEmails.join(', ');
 
-const usage = `mail — draft-only IMAP helper
+const usage = (knownAccounts: string): string => `mail — draft-only IMAP helper
 
 Commands:
   mail login <email>                       store password in the OS keyring (hidden prompt)
   mail accounts                            list configured accounts
+  mail status [email] [--quick]            check auth per account (--quick: keyring only)
   mail folders <email>                     list folders
   mail search <email> <query...>           search (newest first)
   mail read <email> <folder> <uid>         print one message
@@ -26,8 +30,8 @@ Commands:
 
 Accounts: ${knownAccounts}`;
 
-const badAccount = (): Effect.Effect<void> =>
-  Console.error(`Unknown or missing account. Known: ${knownAccounts}`);
+const badAccount = (known: ReadonlyArray<string>): Effect.Effect<void> =>
+  Console.error(`Unknown or missing account. Known: ${known.join(', ')}`);
 
 const loginCommand = (email: string): Effect.Effect<void, MailError, Secrets> =>
   Effect.gen(function* () {
@@ -109,37 +113,74 @@ const draftCommand = (
     yield* Console.log(`Draft saved to "${folder}".`);
   });
 
+const statusCommand = (
+  only: string | undefined,
+  quick: boolean,
+): Effect.Effect<void, MailError, Env> =>
+  Effect.gen(function* () {
+    const config = yield* MailConfig;
+    if (only !== undefined && !config.emails.includes(only)) {
+      return yield* badAccount(config.emails);
+    }
+    const emails = only === undefined ? config.emails : [only];
+    const results = yield* checkAccounts(emails, { verify: !quick });
+    const width = Math.max(...results.map((result) => result.email.length));
+    yield* Effect.forEach(
+      results,
+      (result) =>
+        Console.log(
+          `${result.email.padEnd(width)}  ${result.ok ? '✓' : '✗'} ${result.message}`,
+        ),
+      { discard: true },
+    );
+  });
+
 const withAccount = (
   email: string | undefined,
-  make: (email: string) => Effect.Effect<void, MailError, Imap | Secrets>,
-): Effect.Effect<void, MailError, Imap | Secrets> =>
-  email !== undefined && findAccount(email) !== undefined
-    ? make(email)
-    : badAccount();
+  make: (email: string) => Effect.Effect<void, MailError, Env>,
+): Effect.Effect<void, MailError, Env> =>
+  Effect.gen(function* () {
+    const config = yield* MailConfig;
+    if (email === undefined || !config.emails.includes(email)) {
+      return yield* badAccount(config.emails);
+    }
+    return yield* make(email);
+  });
 
-const program = (): Effect.Effect<void, MailError, Imap | Secrets> => {
+const program: Effect.Effect<void, MailError, Env> = Effect.gen(function* () {
   switch (command) {
-    case 'accounts':
-      return Console.log(accountEmails.join('\n'));
+    case 'accounts': {
+      const config = yield* MailConfig;
+      return yield* Console.log(config.emails.join('\n'));
+    }
+    case 'status': {
+      const rest = cliArgs.slice(1);
+      const only = rest.find((token) => !token.startsWith('--'));
+      return yield* statusCommand(only, rest.includes('--quick'));
+    }
     case 'login':
-      return withAccount(account, loginCommand);
+      return yield* withAccount(account, loginCommand);
     case 'folders':
-      return withAccount(account, foldersCommand);
+      return yield* withAccount(account, foldersCommand);
     case 'search':
-      return withAccount(account, (value) => searchCommand(value, tail));
+      return yield* withAccount(account, (value) => searchCommand(value, tail));
     case 'read':
-      return withAccount(account, (value) =>
+      return yield* withAccount(account, (value) =>
         readCommand(value, at(tail, 0), at(tail, 1)),
       );
     case 'draft':
-      return withAccount(account, (value) => draftCommand(value, tail));
-    default:
-      return Console.log(usage);
+      return yield* withAccount(account, (value) => draftCommand(value, tail));
+    default: {
+      const config = yield* MailConfig;
+      return yield* Console.log(usage(config.emails.join(', ')));
+    }
   }
-};
+});
 
-const main = program().pipe(
+// Provide first so a config-load failure (a layer build error) is caught here
+// alongside command errors, rather than escaping as an unhandled rejection.
+const main = Effect.provide(program, appLayer).pipe(
   Effect.catchAll((error) => Console.error(`Error: ${error.message}`)),
 );
 
-await Effect.runPromise(Effect.provide(main, appLayer));
+await Effect.runPromise(main);

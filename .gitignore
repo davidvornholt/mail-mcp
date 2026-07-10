@@ -7,3 +7,6 @@ dist/
 # Local secrets: decrypted SOPS output must never be committed.
 secrets/*.yaml
 !secrets/*.example.yaml
+
+# Real account inventory: personal addresses/hosts stay out of git.
+apps/mail/accounts.toml

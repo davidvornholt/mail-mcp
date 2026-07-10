@@ -1,17 +1,34 @@
 import { describe, expect, it } from 'bun:test';
-import { accountEmails, accounts, findAccount } from './account';
+import { accountsFileSchema } from './account';
 
-describe('accounts', () => {
-  it('exposes at least one account', () => {
-    expect(accounts.length).toBeGreaterThan(0);
+const validAccount = {
+  email: 'a@b.com',
+  name: 'A',
+  host: 'imap.b.com',
+  port: 993,
+  secure: true,
+  user: 'a@b.com',
+};
+
+describe('accountsFileSchema', () => {
+  it('parses a valid accounts file', () => {
+    const parsed = accountsFileSchema.parse({ accounts: [validAccount] });
+    expect(parsed.accounts[0]?.host).toBe('imap.b.com');
   });
 
-  it('has unique email addresses', () => {
-    expect(new Set(accountEmails).size).toBe(accountEmails.length);
+  it('rejects an empty accounts list', () => {
+    expect(() => accountsFileSchema.parse({ accounts: [] })).toThrow();
   });
 
-  it('resolves a known account and rejects an unknown one', () => {
-    expect(findAccount('user1@example.com')?.host).toBe('imap.example.net');
-    expect(findAccount('nobody@example.com')).toBeUndefined();
+  it('rejects duplicate account emails', () => {
+    expect(() =>
+      accountsFileSchema.parse({ accounts: [validAccount, validAccount] }),
+    ).toThrow();
+  });
+
+  it('rejects an account missing required fields', () => {
+    expect(() =>
+      accountsFileSchema.parse({ accounts: [{ email: 'a@b.com' }] }),
+    ).toThrow();
   });
 });

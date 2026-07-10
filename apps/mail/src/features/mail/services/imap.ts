@@ -41,6 +41,8 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
           secure: account.secure,
           auth: { user: account.user, pass: password },
           logger: false,
+          connectionTimeout: 15_000,
+          greetingTimeout: 15_000,
         });
         yield* Effect.tryPromise({
           try: () => client.connect(),
@@ -68,6 +70,10 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
     );
 
     return {
+      // Connect and authenticate without doing any work — succeeds once the
+      // account's stored password is accepted by its IMAP server.
+      verify: (email: string): Effect.Effect<void, MailError> =>
+        clientFor(email).pipe(Effect.asVoid),
       listFolders: (
         email: string,
       ): Effect.Effect<ReadonlyArray<FolderInfo>, MailError> =>

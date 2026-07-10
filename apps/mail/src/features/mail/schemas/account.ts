@@ -1,64 +1,36 @@
-// Account inventory, discovered from Thunderbird's prefs.js. No secrets here —
-// passwords live in the OS keyring (see services/secrets.ts). Thunderbird
-// socketType 3 maps to implicit TLS on port 993, so `secure` is always true.
+import { z } from 'zod';
 
-export type Account = {
-  readonly email: string;
-  readonly name: string;
-  readonly host: string;
-  readonly port: number;
-  readonly secure: boolean;
-  readonly user: string;
-};
-
+// Keyring service namespace for stored IMAP passwords. This is a fixed app
+// constant, not per-user config — the passwords themselves live in the OS
+// keyring (see services/secrets.ts), keyed by account email.
 export const keyringService = 'mail-mcp';
 
-export const accounts: ReadonlyArray<Account> = [
-  {
-    email: 'user1@example.com',
-    name: 'DV',
-    host: 'imap.example.net',
-    port: 993,
-    secure: true,
-    user: 'user1@example.com',
-  },
-  {
-    email: 'user2@example.com',
-    name: 'David Vornholt',
-    host: 'imap.example.com',
-    port: 993,
-    secure: true,
-    user: 'user2@example.com',
-  },
-  {
-    email: 'user3@example.com',
-    name: 'David Vornholt',
-    host: 'imap.example.com',
-    port: 993,
-    secure: true,
-    user: 'user3@example.com',
-  },
-  {
-    email: 'user4@example.com',
-    name: 'ProsaBridge Admin',
-    host: 'imap.example.com',
-    port: 993,
-    secure: true,
-    user: 'user4@example.com',
-  },
-  {
-    email: 'user5@example.com',
-    name: 'ProsaBridge',
-    host: 'imap.example.com',
-    port: 993,
-    secure: true,
-    user: 'user5@example.com',
-  },
-];
+const maxPort = 65_535;
 
-export const accountEmails: ReadonlyArray<string> = accounts.map(
-  (account) => account.email,
-);
+// Shape of one non-secret account entry. The values live in `accounts.toml`
+// (git-ignored) and are loaded and validated by MailConfig at runtime.
+export const accountSchema = z.object({
+  email: z.string(),
+  name: z.string(),
+  host: z.string(),
+  port: z.number().int().min(1).max(maxPort),
+  secure: z.boolean(),
+  user: z.string(),
+});
 
-export const findAccount = (email: string): Account | undefined =>
-  accounts.find((account) => account.email === email);
+export type Account = z.infer<typeof accountSchema>;
+
+// A config file must declare at least one account under `[[accounts]]`, and
+// emails must be unique — `getAccount` resolves by email, so a duplicate would
+// silently shadow the later entry.
+export const accountsFileSchema = z.object({
+  accounts: z
+    .array(accountSchema)
+    .min(1)
+    .refine(
+      (accounts) =>
+        new Set(accounts.map((account) => account.email)).size ===
+        accounts.length,
+      { message: 'account emails must be unique' },
+    ),
+});
