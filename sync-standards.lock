@@ -1,6 +1,6 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "ccfc9fabe3108be8d2b6ad6e15c335fe23852587",
+  "sha": "a3d13bfd8d33df09acc2b1d1b97889184e44f2d5",
   "files": {
     ".agents/skills/database/agents/openai.yaml": "4c9f47df24219d5b195c88eef374431f64b453ed1ba057f50d4c11e4549343c1",
     ".agents/skills/database/SKILL.md": "f3fe75b2f5aab696630a72e4ffd562100686e9db62be0a4cb317f4140c2af8da",
@@ -22,9 +22,9 @@
     ".github/workflows/standards-sync.yml": "da83c271552199d02783fc30d129a571ead5a0d3d718a30963b1faba105a6afe",
     ".github/workflows/standards.yml": "fed76777d0308b4b2ef51650a3f1b995ac6756d627e3a2a446e1af646c253b39",
     "AGENTS.md": "b0239f9777863233c262d4103c89872c62ca5661f59f9ba8d75b81187c289138",
-    "biome.base.jsonc": "667113906ac0b41e6fb4676e19384b268564192f68395f097314345d069ccd9d",
+    "biome.base.jsonc": "ff1d52c2c28bcb1ac85fa5e16dc16b932fa7f8b35320d00e7b55d03634612c33",
     "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
-    "packages/a11y-testing/package.json": "b8fd47287c3b93ab620d853e39e82ee1fde8bd63966c051e06f7fb5d64506e7f",
+    "packages/a11y-testing/package.json": "a409cafe54148ea4b9c96ee4f1e8eaffbf5dd4c22db4e7c46f38a59499d1a5f2",
     "packages/a11y-testing/README.md": "1af1a64871ba5843c6c1a95945dbb982662aa140171e7199ae4aab30aebd51dc",
     "packages/a11y-testing/src/axe.ts": "fc38934542c1c7e5a18542725f881e63f5ea7f2c51de8a092ce39e16c87c8c21",
     "packages/a11y-testing/src/playwright-config.test.ts": "62f67cce7871f5be5f084e11b2b6a9733cfce064a3d2f82495c6c9653e4436c0",
@@ -33,7 +33,7 @@
     "packages/typescript-config/base.json": "f1b0c9514018f127d44a0704c95a09432b98b40bb870216a9139fa9a0783f36e",
     "packages/typescript-config/base.test.ts": "51c619e48bc470f0923ca3d39ccb03d8940ef36f22d5fbe56b403aeee26e3728",
     "packages/typescript-config/next.json": "ec79fbd3cd2f82ead753a4752b14cb761e33408df2288a6c1be7c13f701e2a84",
-    "packages/typescript-config/package.json": "33dd47f7644a8f3a74348f6ff0e25b9c0dfd6ebf2359f06c1ef20d00fdf34482",
+    "packages/typescript-config/package.json": "512d710faf75f140e0111475c74a4589ffd52f53be89e00c359966a8872ba124",
     "packages/typescript-config/react-library.json": "0f363bb90f560d98dce4ac7d6032ba852515b7e426a7ff913e0868b77232e195",
     "packages/typescript-config/README.md": "ffd46925c5c2145247f4fac72adc5c1153930b3bd33a6dbb9d1b2d3c22432f3b",
     "packages/typescript-config/tsconfig.json": "9ba40a1b20b3a3bfea4e4a97e2228ce8ae017393e20e7b906ffe41d35ed83c0d",

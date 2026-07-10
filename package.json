@@ -12,9 +12,9 @@
     "check:fix": "bun run scripts/sync-standards.ts --check && turbo run lint:fix check-types test build test:a11y"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.1",
-    "turbo": "^2.9.18",
-    "typescript": "6.0.3"
+    "@biomejs/biome": "2.5.2",
+    "turbo": "^2.10.4",
+    "typescript": "7.0.2"
   },
   "engines": {
     "node": "24",
