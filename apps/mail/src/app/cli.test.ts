@@ -23,22 +23,38 @@ const runCli = (args: ReadonlyArray<string>, config: string): CliResult => {
   };
 };
 
+// Each case cold-starts the CLI as a subprocess, which takes several seconds
+// on CI runners — well past bun test's 5s default timeout.
+const subprocessTimeoutMs = 30_000;
+
 describe('cli exit codes', () => {
-  it('unknown account exits non-zero', () => {
-    const result = runCli(['folders', 'nobody@example.com'], fixturePath);
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('Unknown or missing account');
-  });
+  it(
+    'unknown account exits non-zero',
+    () => {
+      const result = runCli(['folders', 'nobody@example.com'], fixturePath);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Unknown or missing account');
+    },
+    subprocessTimeoutMs,
+  );
 
-  it('missing accounts config exits non-zero', () => {
-    const result = runCli(['accounts'], '/nonexistent/accounts.toml');
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain('Error:');
-  });
+  it(
+    'missing accounts config exits non-zero',
+    () => {
+      const result = runCli(['accounts'], '/nonexistent/accounts.toml');
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Error:');
+    },
+    subprocessTimeoutMs,
+  );
 
-  it('usage banner exits zero', () => {
-    const result = runCli([], fixturePath);
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('mail — draft-only IMAP helper');
-  });
+  it(
+    'usage banner exits zero',
+    () => {
+      const result = runCli([], fixturePath);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('mail — draft-only IMAP helper');
+    },
+    subprocessTimeoutMs,
+  );
 });
