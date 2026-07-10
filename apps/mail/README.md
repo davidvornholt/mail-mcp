@@ -13,6 +13,7 @@ It can `search`, `read`, and `save-draft` only. There is **no send and no delete
 mail login <email>                     # store a password in the OS keyring (hidden prompt)
 mail accounts                          # list configured accounts
 mail status [email] [--quick]          # check auth per account (--quick: keyring only, no connect)
+                                       # exits non-zero if any checked account fails
 mail folders <email>                   # list folders
 mail search <email> <query...>         # search, newest first
 mail read <email> <folder> <uid>       # print one message

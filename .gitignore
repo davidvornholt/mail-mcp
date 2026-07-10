@@ -10,3 +10,7 @@ secrets/*.yaml
 
 # Real account inventory: personal addresses/hosts stay out of git.
 apps/mail/accounts.toml
+
+# Agent scratch space (review-loop ledgers) and harness worktrees.
+.agents/tmp/
+.claude/worktrees/

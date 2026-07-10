@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import process from 'node:process';
 import { Console, Effect } from 'effect';
 import type { MailError } from '../features/mail/errors/errors';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
@@ -30,8 +31,18 @@ Commands:
 
 Accounts: ${knownAccounts}`;
 
+// Failure contract: every error path — typed MailErrors, unknown accounts,
+// usage mistakes, and accounts that fail `mail status` — exits non-zero so
+// scripts can rely on the exit code.
+const flagFailure: Effect.Effect<void> = Effect.sync(() => {
+  process.exitCode = 1;
+});
+
+const fail = (message: string): Effect.Effect<void> =>
+  flagFailure.pipe(Effect.andThen(Console.error(message)));
+
 const badAccount = (known: ReadonlyArray<string>): Effect.Effect<void> =>
-  Console.error(`Unknown or missing account. Known: ${known.join(', ')}`);
+  fail(`Unknown or missing account. Known: ${known.join(', ')}`);
 
 const loginCommand = (email: string): Effect.Effect<void, MailError, Secrets> =>
   Effect.gen(function* () {
@@ -39,7 +50,7 @@ const loginCommand = (email: string): Effect.Effect<void, MailError, Secrets> =>
       `Password for ${email} (input hidden): `,
     );
     if (password === '') {
-      yield* Console.error('Empty password — aborted.');
+      yield* fail('Empty password — aborted.');
       return;
     }
     const secrets = yield* Secrets;
@@ -77,7 +88,7 @@ const readCommand = (
 ): Effect.Effect<void, MailError, Imap> =>
   Effect.gen(function* () {
     if (folder === undefined || uid === undefined) {
-      yield* Console.error('Usage: mail read <email> <folder> <uid>');
+      yield* fail('Usage: mail read <email> <folder> <uid>');
       return;
     }
     const imap = yield* Imap;
@@ -93,12 +104,12 @@ const draftCommand = (
     const flags = parseFlags(args);
     const to = flags.get('to');
     if (to === undefined) {
-      yield* Console.error('Missing --to');
+      yield* fail('Missing --to');
       return;
     }
     const body = yield* Effect.promise(() => Bun.stdin.text());
     if (body.trim() === '') {
-      yield* Console.error('Draft body is empty — pipe the body via stdin.');
+      yield* fail('Draft body is empty — pipe the body via stdin.');
       return;
     }
     const imap = yield* Imap;
@@ -133,6 +144,9 @@ const statusCommand = (
         ),
       { discard: true },
     );
+    if (results.some((result) => !result.ok)) {
+      yield* flagFailure;
+    }
   });
 
 const withAccount = (
@@ -180,7 +194,7 @@ const program: Effect.Effect<void, MailError, Env> = Effect.gen(function* () {
 // Provide first so a config-load failure (a layer build error) is caught here
 // alongside command errors, rather than escaping as an unhandled rejection.
 const main = Effect.provide(program, appLayer).pipe(
-  Effect.catchAll((error) => Console.error(`Error: ${error.message}`)),
+  Effect.catchAll((error) => fail(`Error: ${error.message}`)),
 );
 
 await Effect.runPromise(main);

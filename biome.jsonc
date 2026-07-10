@@ -22,6 +22,19 @@
       }
     },
     {
+      // CLI entrypoint: exits non-zero on failure so scripts can rely on the
+      // exit code, which needs node:process. App code otherwise must not
+      // import Node built-ins.
+      "includes": ["apps/mail/src/app/cli.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noNodejsModules": "off"
+          }
+        }
+      }
+    },
+    {
       // The MCP SDK exposes its entrypoints through a package.json "exports" map
       // with .js subpaths that Biome's module resolver does not follow; tsc and
       // Bun both resolve them correctly.
