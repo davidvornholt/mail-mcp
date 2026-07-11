@@ -8,11 +8,13 @@
     "packages/*"
   ],
   "scripts": {
-    "check": "bun run scripts/sync-standards.ts --check && turbo run lint check-types test build test:a11y",
-    "check:fix": "bun run scripts/sync-standards.ts --check && turbo run lint:fix check-types test build test:a11y"
+    "check": "standards check && turbo run lint check-types test build test:a11y",
+    "check:fix": "standards check && turbo run lint:fix check-types test build test:a11y",
+    "standards": "standards"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.2",
+    "@davidvornholt/standards": "0.2.0",
     "turbo": "^2.10.4",
     "typescript": "7.0.2"
   },

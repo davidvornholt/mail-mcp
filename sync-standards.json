@@ -3,11 +3,10 @@
   "seedDir": "template",
   "paths": [
     "sync-standards.json",
-    "scripts/sync-standards.ts",
-    "scripts/sync-standards.test.ts",
     "AGENTS.md",
     "CLAUDE.md",
     ".agents/skills/database",
+    ".agents/skills/declarative-infra",
     ".agents/skills/frontend-design",
     ".agents/skills/git-commit",
     ".agents/skills/github-actions",
