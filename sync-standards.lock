@@ -1,6 +1,6 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "a3d13bfd8d33df09acc2b1d1b97889184e44f2d5",
+  "sha": "b8c000efdbe9709615b0c198288c03b56826f12d",
   "files": {
     ".agents/skills/database/agents/openai.yaml": "4c9f47df24219d5b195c88eef374431f64b453ed1ba057f50d4c11e4549343c1",
     ".agents/skills/database/SKILL.md": "f3fe75b2f5aab696630a72e4ffd562100686e9db62be0a4cb317f4140c2af8da",
@@ -9,16 +9,14 @@
     ".agents/skills/git-commit/SKILL.md": "b079e93c303e482ead80f6967e042db35697bf7a94ff8880fcf27b9a9e04397b",
     ".agents/skills/github-actions/agents/openai.yaml": "3e16e49eff2810336fbce00a930aa15b7ab5ec0b1984c7b4d57729fc3ab347d0",
     ".agents/skills/github-actions/SKILL.md": "94876543fea3a227146abdd3450edc06163bed1761aa7dfde6026ad4cf975e88",
-    ".agents/skills/review-loop/SKILL.md": "08b8207f5fd16138116915a49d0fb48756eb61fbb0ea396cafeadda955ec5417",
-    ".agents/skills/review/SKILL.md": "84943d62671462b033df0a7c655b11d29030a415c51f1ed80b294fad4a8e6294",
+    ".agents/skills/review-loop/SKILL.md": "32c5e597bb7f5cc588e019a7af8b95e0d5ab0a588ece063ba13ff601e0438aac",
+    ".agents/skills/review/SKILL.md": "5acb6ecd6469b9b48dfe371fec9365b527545e0487a903bf250d3e8145df98b9",
     ".agents/skills/standards-sync/agents/openai.yaml": "84f4b663179146d6f5af15110970dcc66f344c4d08cbaa84b6f680988ead65e1",
     ".agents/skills/standards-sync/SKILL.md": "7af270a08ec503fa2e4b61434284a9449dcb5f4800dceac3f87db98a4d18978c",
-    ".agents/skills/vibe-designing/agents/openai.yaml": "9ba6a28274a5baff3bbd14ccf16220243f705c95fca402af4fa15456c5f2132b",
-    ".agents/skills/vibe-designing/references/phase-1.md": "87dac6780752f6cdda5883c4bd1b8133d19ab3f1ed14c14e88c16d6dc5351520",
-    ".agents/skills/vibe-designing/references/phase-2.md": "9b451c26acfcfbf05e3c9626a6b9a0fd3bad10ddad402b10bf73205c72c1f187",
-    ".agents/skills/vibe-designing/references/phase-3.md": "6d1a3999580cdd2272bf73a73fd0f7e531103b8c43caad6e174b60d8245eee71",
-    ".agents/skills/vibe-designing/references/styles/editorial.md": "7fd40bb8f68e48487c9ae927cfc9e814802b7da661cda37bc4261bd3e557eeee",
-    ".agents/skills/vibe-designing/SKILL.md": "ae44d6fd08b984f531698ca529219678add77aba7ad899eef4c6d168c6d50fea",
+    ".agents/skills/ux-ui/SKILL.md": "9f9ced7f3ee9a7e15f907c34726d14d76e3ef386e699a4644b6703add2b2a901",
+    ".claude/agents/reviewer.md": "8e2a05dc1d5f73a079f2654c61a764dcfb252850dcd21eb88f4aaeddeee06f53",
+    ".claude/workflows/review-pass.js": "0528edb7648c79fddd4e7e9d95052a28869181fdf203cc99fa338210c5097bcc",
+    ".codex/agents/reviewer.toml": "efbcd7b039bf4d682f792ddbe4cd4618373de1ebd7a43f53f43d566ed64bef3c",
     ".github/workflows/standards-sync.yml": "da83c271552199d02783fc30d129a571ead5a0d3d718a30963b1faba105a6afe",
     ".github/workflows/standards.yml": "fed76777d0308b4b2ef51650a3f1b995ac6756d627e3a2a446e1af646c253b39",
     "AGENTS.md": "b0239f9777863233c262d4103c89872c62ca5661f59f9ba8d75b81187c289138",
@@ -37,9 +35,9 @@
     "packages/typescript-config/react-library.json": "0f363bb90f560d98dce4ac7d6032ba852515b7e426a7ff913e0868b77232e195",
     "packages/typescript-config/README.md": "ffd46925c5c2145247f4fac72adc5c1153930b3bd33a6dbb9d1b2d3c22432f3b",
     "packages/typescript-config/tsconfig.json": "9ba40a1b20b3a3bfea4e4a97e2228ce8ae017393e20e7b906ffe41d35ed83c0d",
-    "scripts/sync-standards.test.ts": "d37e0900064db82818837672816e1bd7c6d12850651df94266add5191e45cc67",
-    "scripts/sync-standards.ts": "07418be722817d875bcd184fd92bd7d0f5989882f36d0a4c6ce4762fd57d5e54",
+    "scripts/sync-standards.test.ts": "3aa9704d91cab89abfa84f4786749579dd0c2f8f0ee2b469288b331fa9d756b5",
+    "scripts/sync-standards.ts": "5abbf58a3eb5c22bfb1ae518b5b8ec31c3cfdbc43fe108c631e942835991dc99",
     "standards.just": "145172becdd85f9830e37d279cee62b751f1279176a77e26ff43312505e188f7",
-    "sync-standards.json": "3dab7c54429d0e49b7657bd0bcf53f2adcec9e5ba829503db3e87a8ccd8f927c"
+    "sync-standards.json": "9044df38cb6f11f1ddea41974b20834f23ae05f58258cc331f0f1a8475e0326a"
   }
 }

@@ -10,3 +10,8 @@ limit.
   splitting it would break that contract. The file is read-only in this repo
   (owned by davidvornholt/standards), so the split/keep decision belongs
   upstream.
+- `scripts/sync-standards.test.ts` (~232 lines) — canonical synced test suite
+  for the sync engine (bucket-1, read-only in this repo, owned by
+  davidvornholt/standards). Broad behavioral coverage of one boundary file is
+  clearer as a single colocated test file, and the split/keep decision belongs
+  upstream, same as the engine itself.
