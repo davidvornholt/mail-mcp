@@ -1,34 +1,41 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { Effect, Layer, ManagedRuntime } from 'effect';
-import { z } from 'zod';
 import type { MailError } from '../features/mail/errors/errors';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
 import { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
+import {
+  accountFields,
+  checkAccountsFields,
+  deleteDraftFields,
+  destructiveAnnotations,
+  draftReplacementAnnotations,
+  draftWriteAnnotations,
+  messageFields,
+  readMessageFields,
+  readOnlyAnnotations,
+  searchMailFields,
+  serverInstructions,
+  textResult,
+  updateDraftFields,
+} from './mcp-contract';
 
 type ToolEnv = Imap | Secrets | MailConfig;
 
-// One managed runtime for the process keeps IMAP connections warm across tool
-// calls; the Imap layer's finalizer closes them if the runtime is disposed.
-// MailConfig and Secrets are merged in for the account list and status checks.
+// Keep IMAP connections warm; the Imap layer finalizer closes them on disposal.
+// MailConfig and Secrets supply the account list and status checks.
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(MailConfig.Default, Secrets.Default, Imap.Default),
 );
 
-// Load the account list once at startup; a config-load failure rejects here and
-// exits the server with the ConfigError message on stderr.
+// A startup config failure exits with the ConfigError message on stderr.
 const accountEmails = await runtime.runPromise(
   Effect.map(MailConfig, (config) => config.emails),
 );
 const accountList = accountEmails.join(', ');
-
-const textResult = (text: string, isError = false) => ({
-  content: [{ type: 'text' as const, text }],
-  ...(isError ? { isError: true } : {}),
-});
 
 const runTool = <A>(program: Effect.Effect<A, MailError, ToolEnv>) =>
   runtime.runPromise(
@@ -40,39 +47,28 @@ const runTool = <A>(program: Effect.Effect<A, MailError, ToolEnv>) =>
     ),
   );
 
-const server = new McpServer({ name: 'mail-mcp', version: '0.0.0' });
+const server = new McpServer(
+  { name: 'mail-mcp', version: '0.0.0' },
+  { instructions: serverInstructions },
+);
 
-const attachmentSchema = z.object({
-  path: z.string(),
-  filename: z.string().optional(),
-  contentType: z.string().optional(),
-  cid: z.string().optional(),
-});
-
-const messageFields = {
-  account: z.string(),
-  to: z.string(),
-  cc: z.string().optional(),
-  bcc: z.string().optional(),
-  subject: z.string(),
-  text: z.string(),
-  html: z.string().optional(),
-  attachments: z.array(attachmentSchema).optional(),
-  inReplyTo: z.string().optional(),
-  references: z.array(z.string()).optional(),
-} as const;
-
-server.tool(
+server.registerTool(
   'list_accounts',
-  'List the configured email accounts you can act on.',
-  {},
+  {
+    description: 'List the configured email accounts you can act on.',
+    inputSchema: {},
+    annotations: readOnlyAnnotations,
+  },
   () => Promise.resolve(textResult(JSON.stringify(accountEmails, null, 2))),
 );
 
-server.tool(
+server.registerTool(
   'check_accounts',
-  `Report each account's auth state: 'authenticated' (works), 'no-password' (needs 'mail login'), or 'unauthenticated' (wrong password or IMAP config). Pass an account to check one, or quick=true for a keyring-only check that skips connecting. Accounts: ${accountList}`,
-  { account: z.string().optional(), quick: z.boolean().optional() },
+  {
+    description: `Report each account's auth state: 'authenticated' (works), 'no-password' (needs 'mail login'), or 'unauthenticated' (wrong password or IMAP config). Pass an account to check one, or quick=true for a keyring-only check that skips connecting. Accounts: ${accountList}`,
+    inputSchema: checkAccountsFields,
+    annotations: readOnlyAnnotations,
+  },
   ({ account, quick }) =>
     runTool(
       Effect.gen(function* () {
@@ -86,10 +82,13 @@ server.tool(
     ),
 );
 
-server.tool(
+server.registerTool(
   'list_folders',
-  `List IMAP folders for an account. Accounts: ${accountList}`,
-  { account: z.string() },
+  {
+    description: `List IMAP folders for an account. Accounts: ${accountList}`,
+    inputSchema: accountFields,
+    annotations: readOnlyAnnotations,
+  },
   ({ account }) =>
     runTool(
       Effect.gen(function* () {
@@ -99,17 +98,12 @@ server.tool(
     ),
 );
 
-server.tool(
+server.registerTool(
   'search_mail',
-  `Search a mailbox: 'query' matches subject/body/from/to text, or narrow with 'from'/'subject'/'since' (ISO date). Returns folder+uid handles for read_message. Accounts: ${accountList}`,
   {
-    account: z.string(),
-    query: z.string().optional(),
-    folder: z.string().optional(),
-    from: z.string().optional(),
-    subject: z.string().optional(),
-    since: z.string().optional(),
-    limit: z.number().optional(),
+    description: `Search a mailbox: 'query' matches subject/body/from/to text, or narrow with 'from'/'subject'/'since' (ISO date). Returns folder+uid handles for read_message. Accounts: ${accountList}`,
+    inputSchema: searchMailFields,
+    annotations: readOnlyAnnotations,
   },
   ({ account, query, folder, from, subject, since, limit }) =>
     runTool(
@@ -127,10 +121,13 @@ server.tool(
     ),
 );
 
-server.tool(
+server.registerTool(
   'read_message',
-  `Read one full message by folder + uid (from search_mail). Accounts: ${accountList}`,
-  { account: z.string(), folder: z.string(), uid: z.number() },
+  {
+    description: `Read one full message by folder + uid (from search_mail). Accounts: ${accountList}`,
+    inputSchema: readMessageFields,
+    annotations: readOnlyAnnotations,
+  },
   ({ account, folder, uid }) =>
     runTool(
       Effect.gen(function* () {
@@ -140,10 +137,13 @@ server.tool(
     ),
 );
 
-server.tool(
+server.registerTool(
   'save_draft',
-  `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). For replies pass inReplyTo + references to keep threading. Accounts: ${accountList}`,
-  messageFields,
+  {
+    description: `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). For replies pass inReplyTo + references to keep threading. Accounts: ${accountList}`,
+    inputSchema: messageFields,
+    annotations: draftWriteAnnotations,
+  },
   (input) =>
     runTool(
       Effect.gen(function* () {
@@ -158,39 +158,38 @@ server.tool(
     ),
 );
 
-server.tool(
+server.registerTool(
   'update_draft',
-  `Replace an existing draft identified by its drafts folder + uid. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
   {
-    ...messageFields,
-    folder: z.string(),
-    uid: z.number().int().positive(),
-    uidValidity: z.string().optional(),
+    description: `Replace an existing draft identified by its drafts folder + uid. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
+    inputSchema: updateDraftFields,
+    annotations: draftReplacementAnnotations,
   },
-  (input) =>
+  ({ uidValidity, ...input }) =>
     runTool(
       Effect.gen(function* () {
         const imap = yield* Imap;
-        const location = yield* imap.updateDraft(input);
+        const location = yield* imap.updateDraft({
+          ...input,
+          uidValidity: uidValidity ?? undefined,
+        });
         return { ...location, account: input.account };
       }),
     ),
 );
 
-server.tool(
+server.registerTool(
   'delete_draft',
-  `Permanently delete a draft identified by its drafts folder + uid. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
   {
-    account: z.string(),
-    folder: z.string(),
-    uid: z.number().int().positive(),
-    uidValidity: z.string().optional(),
+    description: `Permanently delete a draft identified by its drafts folder + uid. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
+    inputSchema: deleteDraftFields,
+    annotations: destructiveAnnotations,
   },
   ({ account, folder, uid, uidValidity }) =>
     runTool(
       Effect.gen(function* () {
         const imap = yield* Imap;
-        yield* imap.deleteDraft(account, folder, uid, uidValidity);
+        yield* imap.deleteDraft(account, folder, uid, uidValidity ?? undefined);
         return { account, folder, uid, deleted: true };
       }),
     ),

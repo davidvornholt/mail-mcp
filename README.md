@@ -2,7 +2,7 @@
 
 > Built on [davidvornholt/standards](https://github.com/davidvornholt/standards).
 
-A draft-only IMAP helper for Thunderbird workflows, exposed to Claude as an **MCP server** and to you as a **`mail` CLI** over one shared Effect core. Through the MCP server it can search and read mail and create, update, or delete drafts with HTML and attachments; the `mail` CLI covers login, status, folder/search/read, and plain-text draft creation. It cannot send emails: drafts sync into Thunderbird for review and sending.
+A draft-only IMAP helper for Thunderbird workflows, exposed to Codex, Claude, and other compatible clients as an **MCP server** and to you as a **`mail` CLI** over one shared Effect core. Through the MCP server it can search and read mail and create, update, or delete drafts with HTML and attachments; the `mail` CLI covers login, status, folder/search/read, and plain-text draft creation. It cannot send emails: drafts sync into Thunderbird for review and sending.
 
 ## Layout
 
@@ -39,13 +39,39 @@ mail login you@example.com
 mail status
 ```
 
-The MCP server is registered with Claude Code (user scope):
+Register the MCP server with Codex:
+
+```bash
+codex mcp add mail -- bun run <repo>/apps/mail/src/app/server.ts
+codex mcp get mail
+```
+
+Codex defers MCP tool definitions until they are relevant, so registering the
+server does not eagerly add every mail tool schema to the model context. Restart
+Codex after adding it, then use `/mcp` to inspect the connected server.
+
+For explicit write approvals and more headroom for IMAP operations, edit the
+generated entry in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.mail]
+command = "bun"
+args = ["run", "<repo>/apps/mail/src/app/server.ts"]
+startup_timeout_sec = 15
+tool_timeout_sec = 120
+default_tools_approval_mode = "writes"
+
+[mcp_servers.mail.tools.delete_draft]
+approval_mode = "prompt"
+```
+
+For Claude Code (user scope), use:
 
 ```bash
 claude mcp add --scope user mail -- bun run <repo>/apps/mail/src/app/server.ts
 ```
 
-Once a password is stored, ask Claude to search your mail or compose a draft. You can also drive the review-first CLI yourself:
+Once a password is stored, ask your MCP client to search your mail or compose a draft. You can also drive the review-first CLI yourself:
 
 ```bash
 mail search you@example.com invoice

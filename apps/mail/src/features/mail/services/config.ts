@@ -3,7 +3,7 @@ import { ConfigError, UnknownAccountError } from '../errors/errors';
 import { type Account, accountsFileSchema } from '../schemas/account';
 
 // Default config lives next to the app root so a spawned MCP server resolves it
-// regardless of the working directory Claude Code launches it from. Override the
+// regardless of the working directory an MCP client launches it from. Override the
 // path with MAIL_ACCOUNTS_CONFIG (used by tests to point at a fixture).
 const defaultConfigPath = Bun.fileURLToPath(
   new URL('../../../../accounts.toml', import.meta.url),
