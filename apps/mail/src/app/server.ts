@@ -42,6 +42,26 @@ const runTool = <A>(program: Effect.Effect<A, MailError, ToolEnv>) =>
 
 const server = new McpServer({ name: 'mail-mcp', version: '0.0.0' });
 
+const attachmentSchema = z.object({
+  path: z.string(),
+  filename: z.string().optional(),
+  contentType: z.string().optional(),
+  cid: z.string().optional(),
+});
+
+const messageFields = {
+  account: z.string(),
+  to: z.string(),
+  cc: z.string().optional(),
+  bcc: z.string().optional(),
+  subject: z.string(),
+  text: z.string(),
+  html: z.string().optional(),
+  attachments: z.array(attachmentSchema).optional(),
+  inReplyTo: z.string().optional(),
+  references: z.array(z.string()).optional(),
+} as const;
+
 server.tool(
   'list_accounts',
   'List the configured email accounts you can act on.',
@@ -123,35 +143,55 @@ server.tool(
 server.tool(
   'save_draft',
   `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). For replies pass inReplyTo + references to keep threading. Accounts: ${accountList}`,
-  {
-    account: z.string(),
-    to: z.string(),
-    cc: z.string().optional(),
-    bcc: z.string().optional(),
-    subject: z.string(),
-    text: z.string(),
-    inReplyTo: z.string().optional(),
-    references: z.array(z.string()).optional(),
-  },
-  ({ account, to, cc, bcc, subject, text, inReplyTo, references }) =>
+  messageFields,
+  (input) =>
     runTool(
       Effect.gen(function* () {
         const imap = yield* Imap;
-        const folder = yield* imap.saveDraft({
-          account,
-          to,
-          cc,
-          bcc,
-          subject,
-          text,
-          inReplyTo,
-          references,
-        });
+        const location = yield* imap.saveDraft(input);
         return {
-          savedTo: folder,
-          account,
+          ...location,
+          account: input.account,
           note: 'Draft saved. Review and send it in Thunderbird.',
         };
+      }),
+    ),
+);
+
+server.tool(
+  'update_draft',
+  `Replace an existing draft identified by its drafts folder + uid. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
+  {
+    ...messageFields,
+    folder: z.string(),
+    uid: z.number().int().positive(),
+    uidValidity: z.string().optional(),
+  },
+  (input) =>
+    runTool(
+      Effect.gen(function* () {
+        const imap = yield* Imap;
+        const location = yield* imap.updateDraft(input);
+        return { ...location, account: input.account };
+      }),
+    ),
+);
+
+server.tool(
+  'delete_draft',
+  `Permanently delete a draft identified by its drafts folder + uid. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
+  {
+    account: z.string(),
+    folder: z.string(),
+    uid: z.number().int().positive(),
+    uidValidity: z.string().optional(),
+  },
+  ({ account, folder, uid, uidValidity }) =>
+    runTool(
+      Effect.gen(function* () {
+        const imap = yield* Imap;
+        yield* imap.deleteDraft(account, folder, uid, uidValidity);
+        return { account, folder, uid, deleted: true };
       }),
     ),
 );

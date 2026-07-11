@@ -75,3 +75,44 @@ Entry format: `## <id> — <title>`, then Date, Decision, Rationale, Scope.
   decision belongs upstream, same as the engine itself.
 - Scope: do not re-report the file's length while the exceptions-doc entry
   exists.
+
+## Cluster B (mail draft lifecycle) — resolved decisions
+
+These four items were surfaced by the review loop as decisions rather than
+mechanical fixes. Resolved by the user on 2026-07-11.
+
+### O-1 — attachment file-path surface in the LLM-driven MCP server — ACCEPTED RISK
+
+- Finding: `save_draft`/`update_draft` accept an unconstrained local file `path`
+  as an attachment (`server.ts` `attachmentSchema.path: z.string()`), and
+  `buildMime` sets `disableUrlAccess: true` but not `disableFileAccess`. A
+  prompt-injected email body (which the model can read via `search_mail`/
+  `read_message`) can steer the model to attach any process-readable file
+  (`~/.ssh/id_rsa`, `/proc/self/environ`) and `save_draft` it to the account's
+  remote Drafts folder — an out-of-band exfiltration channel. No size cap.
+  Confirmed empirically (arbitrary paths compile into the MIME).
+- Decision: accepted risk. This is a single-user, local-only helper the operator
+  runs against their own accounts; path-based attachments are retained as-is. Do
+  not re-report. Revisit if the server is ever exposed to untrusted operators.
+
+### O-2 — non-UIDPLUS delete collaterally expunges other \Deleted messages — ACCEPTED RISK
+
+- Finding: on servers without UIDPLUS, imapflow's `messageDelete` falls back to
+  a plain `EXPUNGE`, removing every `\Deleted`-flagged message in the folder,
+  not just the target uid.
+- Decision: accepted risk (the target servers support UIDPLUS). Do not
+  re-report. Residual note only.
+
+### O-3 — UIDVALIDITY captured and verified before expunge — IMPLEMENTED
+
+- Fix: `appendDraft` now returns the APPENDUID `uidValidity` (serialized) on
+  `DraftLocation`; `update_draft`/`delete_draft` accept an optional
+  `uidValidity`, and `deleteDraft` compares it against the folder's current
+  `uidValidity` under the mailbox lock, failing with `StaleUidError` on a
+  mismatch (a reindexed mailbox) instead of expunging a possibly-different
+  message. Covered by tests in `draft-lifecycle.test.ts`.
+
+### O-4 — appended drafts marked \Seen — IMPLEMENTED
+
+- Fix: `appendDraft` now appends with `['\\Draft', '\\Seen']` so agent-saved
+  drafts do not surface as unread in the MUA.

@@ -15,3 +15,9 @@ limit.
   davidvornholt/standards). Broad behavioral coverage of one boundary file is
   clearer as a single colocated test file, and the split/keep decision belongs
   upstream, same as the engine itself.
+- `apps/mail/src/app/cli.ts` (~209 lines) — the CLI entrypoint is a single
+  command router: it parses argv and dispatches every `mail` subcommand (login,
+  accounts, status, folders, search, read, draft) to a thin handler. Keeping the
+  dispatch table and its handlers in one boundary file is clearer than
+  fragmenting the entrypoint; the business logic already lives in
+  `src/features/mail/services`.

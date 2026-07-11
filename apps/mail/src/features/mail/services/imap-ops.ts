@@ -86,7 +86,7 @@ const toFullMessage = (
   html: typeof parsed.html === 'string' ? parsed.html : null,
 });
 
-const lockMailbox = (client: ImapFlow, folder: string) =>
+export const lockMailbox = (client: ImapFlow, folder: string) =>
   Effect.acquireRelease(
     Effect.tryPromise({
       try: () => client.getMailboxLock(folder),

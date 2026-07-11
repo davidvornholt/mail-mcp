@@ -5,6 +5,7 @@ import type { MailError } from '../features/mail/errors/errors';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
+import { storeVerifiedPassword } from '../features/mail/services/login';
 import { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
 import { at, parseFlags } from '../shared/args';
@@ -21,7 +22,7 @@ const tail = cliArgs.slice(2);
 const usage = (knownAccounts: string): string => `mail — draft-only IMAP helper
 
 Commands:
-  mail login <email>                       store password in the OS keyring (hidden prompt)
+  mail login <email>                       verify and store password (hidden prompt)
   mail accounts                            list configured accounts
   mail status [email] [--quick]            check auth per account (--quick: keyring only)
   mail folders <email>                     list folders
@@ -44,7 +45,9 @@ const fail = (message: string): Effect.Effect<void> =>
 const badAccount = (known: ReadonlyArray<string>): Effect.Effect<void> =>
   fail(`Unknown or missing account. Known: ${known.join(', ')}`);
 
-const loginCommand = (email: string): Effect.Effect<void, MailError, Secrets> =>
+const loginCommand = (
+  email: string,
+): Effect.Effect<void, MailError, Imap | Secrets> =>
   Effect.gen(function* () {
     const password = yield* promptHidden(
       `Password for ${email} (input hidden): `,
@@ -54,9 +57,15 @@ const loginCommand = (email: string): Effect.Effect<void, MailError, Secrets> =>
       return;
     }
     const secrets = yield* Secrets;
-    yield* secrets.setPassword(email, password);
+    const imap = yield* Imap;
+    yield* storeVerifiedPassword(
+      email,
+      password,
+      imap.verifyCredentials,
+      secrets.setPassword,
+    );
     yield* Console.log(
-      `Stored password for ${email} in the OS keyring (service "mail-mcp").`,
+      `Verified and stored password for ${email} in the OS keyring (service "mail-mcp").`,
     );
   });
 
@@ -113,7 +122,7 @@ const draftCommand = (
       return;
     }
     const imap = yield* Imap;
-    const folder = yield* imap.saveDraft({
+    const location = yield* imap.saveDraft({
       account: email,
       to,
       cc: flags.get('cc'),
@@ -121,7 +130,7 @@ const draftCommand = (
       text: body,
       inReplyTo: flags.get('in-reply-to'),
     });
-    yield* Console.log(`Draft saved to "${folder}".`);
+    yield* Console.log(`Draft saved to "${location.folder}".`);
   });
 
 const statusCommand = (

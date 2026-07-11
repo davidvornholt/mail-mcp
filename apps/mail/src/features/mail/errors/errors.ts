@@ -38,6 +38,12 @@ export class DraftError extends Data.TaggedError('DraftError')<{
   readonly message: string;
 }> {}
 
+export class StaleUidError extends Data.TaggedError('StaleUidError')<{
+  readonly folder: string;
+  readonly uid: number;
+  readonly message: string;
+}> {}
+
 export type MailError =
   | ConfigError
   | UnknownAccountError
@@ -45,4 +51,5 @@ export type MailError =
   | KeyringError
   | ImapError
   | MessageNotFoundError
-  | DraftError;
+  | DraftError
+  | StaleUidError;

@@ -42,10 +42,34 @@ export type DraftInput = {
   readonly to: string;
   readonly subject: string;
   readonly text: string;
+  readonly html?: string;
+  readonly attachments?: ReadonlyArray<MailAttachment>;
   readonly cc?: string;
   readonly bcc?: string;
   readonly inReplyTo?: string;
   readonly references?: ReadonlyArray<string>;
+};
+
+export type MailAttachment = {
+  readonly path: string;
+  readonly filename?: string;
+  readonly contentType?: string;
+  readonly cid?: string;
+};
+
+export type DraftLocation = {
+  readonly folder: string;
+  readonly uid: number | null;
+  // UIDVALIDITY of the folder when the uid was minted, serialized (it is a
+  // bigint). Null when the server lacks UIDPLUS. Round-trip it back on
+  // update/delete so a mailbox reindex cannot expunge the wrong message.
+  readonly uidValidity: string | null;
+};
+
+export type UpdateDraftInput = DraftInput & {
+  readonly folder: string;
+  readonly uid: number;
+  readonly uidValidity?: string;
 };
 
 export const defaultSearchLimit = 20;
