@@ -4,6 +4,7 @@ import { DraftError } from '../errors/errors';
 import type { Account } from '../schemas/account';
 import type { DraftInput, FullMessage } from '../schemas/mail';
 import { buildReplyContent } from './reply-quote';
+import { textToHtml } from './text-to-html';
 
 export const buildMime = (
   account: Account,
@@ -12,15 +13,16 @@ export const buildMime = (
 ): Effect.Effect<Buffer, DraftError> =>
   Effect.tryPromise({
     try: () => {
+      const html = input.html ?? textToHtml(input.text);
       const content =
         repliedTo === undefined
           ? {
               text: input.text,
-              html: input.html,
+              html,
               inReplyTo: input.inReplyTo,
               references: input.references,
             }
-          : buildReplyContent(input.text, input.html, repliedTo);
+          : buildReplyContent(input.text, html, repliedTo);
       return new MailComposer({
         from: `"${account.name}" <${account.email}>`,
         to: input.to,

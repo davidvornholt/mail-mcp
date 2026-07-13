@@ -140,7 +140,7 @@ server.registerTool(
 server.registerTool(
   'save_draft',
   {
-    description: `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). For replies pass replySource with the folder + uid from read_message; the original conversation is quoted in the body and its threading headers are preserved automatically. replySource-derived headers take precedence over manual inReplyTo + references. Accounts: ${accountList}`,
+    description: `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). An HTML alternative is generated from 'text' automatically; pass 'html' only for custom markup. For replies pass replySource with the folder + uid from read_message; the original conversation is quoted in the body and its threading headers are preserved automatically. replySource-derived headers take precedence over manual inReplyTo + references. Accounts: ${accountList}`,
     inputSchema: messageFields,
     annotations: draftWriteAnnotations,
   },
