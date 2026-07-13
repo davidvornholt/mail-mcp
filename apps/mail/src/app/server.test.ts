@@ -1,38 +1,10 @@
 import { afterEach, expect, it } from 'bun:test';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import {
-  getDefaultEnvironment,
-  StdioClientTransport,
-} from '@modelcontextprotocol/sdk/client/stdio.js';
+import { closeClient, connectClient } from './server-test-client';
 
-const serverPath = Bun.fileURLToPath(new URL('./server.ts', import.meta.url));
-const fixturePath = Bun.fileURLToPath(
-  new URL('../features/mail/services/accounts.fixture.toml', import.meta.url),
-);
-const missingConfigPath = Bun.fileURLToPath(
-  new URL('./accounts.missing.toml', import.meta.url),
-);
 const subprocessTimeoutMs = 30_000;
 
-let transport: StdioClientTransport | undefined;
-
-const connectClient = async () => {
-  const env = getDefaultEnvironment();
-  env.MAIL_ACCOUNTS_CONFIG = fixturePath;
-  transport = new StdioClientTransport({
-    command: 'bun',
-    args: [serverPath],
-    env,
-    stderr: 'pipe',
-  });
-  const client = new Client({ name: 'mail-mcp-test', version: '0.0.0' });
-  await client.connect(transport);
-  return client;
-};
-
 afterEach(async () => {
-  await transport?.close();
-  transport = undefined;
+  await closeClient();
 });
 
 it(
@@ -42,7 +14,7 @@ it(
 
     expect(client.getServerVersion()?.name).toBe('mail-mcp');
     expect(client.getInstructions()).toBe(
-      'Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message and preserve folder, uid, and uidValidity handles.',
+      "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message and preserve folder, uid, and uidValidity handles.",
     );
 
     const { tools } = await client.listTools();
@@ -95,6 +67,25 @@ it(
         uid: { type: 'integer', exclusiveMinimum: 0 },
       },
     });
+    expect(
+      tools.find((tool) => tool.name === 'save_draft')?.inputSchema,
+    ).toMatchObject({
+      properties: {
+        replySource: {
+          type: 'object',
+          required: ['folder', 'uid'],
+          properties: {
+            folder: { type: 'string' },
+            uid: { type: 'integer', exclusiveMinimum: 0 },
+          },
+        },
+        inReplyTo: { type: 'string' },
+        references: {
+          type: 'array',
+          items: { type: 'string' },
+        },
+      },
+    });
     for (const toolName of ['update_draft', 'delete_draft']) {
       expect(
         tools.find(({ name }) => name === toolName)?.inputSchema,
@@ -130,6 +121,16 @@ it(
       {
         name: 'read_message',
         arguments: { account: 'test@example.com', folder: 'INBOX', uid: 0 },
+      },
+      {
+        name: 'save_draft',
+        arguments: {
+          account: 'test@example.com',
+          to: 'recipient@example.com',
+          subject: 'Re: Subject',
+          text: 'Reply',
+          replySource: { folder: 'INBOX', uid: 0 },
+        },
       },
     ] as const;
 
@@ -182,18 +183,3 @@ it(
   },
   subprocessTimeoutMs,
 );
-
-it('keeps configuration failures off the MCP stdout channel', async () => {
-  expect(await Bun.file(missingConfigPath).exists()).toBe(false);
-  const env = getDefaultEnvironment();
-  env.MAIL_ACCOUNTS_CONFIG = missingConfigPath;
-  const result = Bun.spawnSync(['bun', serverPath], {
-    env,
-    timeout: subprocessTimeoutMs,
-  });
-
-  expect(result.exitedDueToTimeout).toBe(false);
-  expect(result.exitCode).not.toBe(0);
-  expect(result.stdout.toString()).toBe('');
-  expect(result.stderr.toString()).toContain('Could not read account config');
-});

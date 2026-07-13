@@ -1,6 +1,5 @@
 import { Effect } from 'effect';
 import type { ImapFlow } from 'imapflow';
-import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import {
   DraftError,
   ImapError,
@@ -12,42 +11,20 @@ import type {
   DraftInput,
   DraftLocation,
   FolderInfo,
+  FullMessage,
   UpdateDraftInput,
 } from '../schemas/mail';
 import { selectDraftsFolder } from './draft-folder';
-import { listFolders, lockMailbox } from './imap-ops';
+import { listFolders, lockMailbox, readMessage } from './imap-ops';
+import { buildMime } from './mime';
 
-export const buildMime = (
-  account: Account,
+const readReplySource = (
+  client: ImapFlow,
   input: DraftInput,
-): Effect.Effect<Buffer, DraftError> =>
-  Effect.tryPromise({
-    try: () =>
-      new MailComposer({
-        from: `"${account.name}" <${account.email}>`,
-        to: input.to,
-        cc: input.cc,
-        bcc: input.bcc,
-        subject: input.subject,
-        text: input.text,
-        html: input.html,
-        attachments: input.attachments?.map((attachment) => ({
-          path: attachment.path,
-          filename: attachment.filename,
-          contentType: attachment.contentType,
-          cid: attachment.cid,
-        })),
-        textEncoding: 'base64',
-        disableUrlAccess: true,
-        inReplyTo: input.inReplyTo,
-        references:
-          input.references === undefined ? undefined : [...input.references],
-      })
-        .compile()
-        .build(),
-    catch: (cause) =>
-      new DraftError({ message: `failed to build draft: ${String(cause)}` }),
-  });
+): Effect.Effect<FullMessage | undefined, ImapError | MessageNotFoundError> =>
+  input.replySource === undefined
+    ? Effect.succeed(undefined)
+    : readMessage(client, input.replySource.folder, input.replySource.uid);
 
 const appendDraft = (
   client: ImapFlow,
@@ -143,11 +120,15 @@ export const writeDraft = (
   client: ImapFlow,
   account: Account,
   input: DraftInput,
-): Effect.Effect<DraftLocation, ImapError | DraftError> =>
+): Effect.Effect<
+  DraftLocation,
+  ImapError | DraftError | MessageNotFoundError
+> =>
   Effect.gen(function* () {
     const folders = yield* listFolders(client);
     const folder = selectDraftsFolder(folders);
-    const raw = yield* buildMime(account, input);
+    const repliedTo = yield* readReplySource(client, input);
+    const raw = yield* buildMime(account, input, repliedTo);
     return yield* appendDraft(client, folder, raw);
   });
 
@@ -155,11 +136,15 @@ export const replaceDraft = (
   client: ImapFlow,
   account: Account,
   input: UpdateDraftInput,
-): Effect.Effect<DraftLocation, ImapError | DraftError> =>
+): Effect.Effect<
+  DraftLocation,
+  ImapError | DraftError | MessageNotFoundError
+> =>
   Effect.gen(function* () {
     const folders = yield* listFolders(client);
     const draftsFolder = yield* requireDraftsFolder(folders, input.folder);
-    const raw = yield* buildMime(account, input);
+    const repliedTo = yield* readReplySource(client, input);
+    const raw = yield* buildMime(account, input, repliedTo);
     const replacement = yield* appendDraft(client, draftsFolder, raw);
     yield* deleteDraft(client, draftsFolder, input.uid, input.uidValidity).pipe(
       Effect.mapError(

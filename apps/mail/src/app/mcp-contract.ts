@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const serverInstructions =
-  'Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message and preserve folder, uid, and uidValidity handles.';
+  "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message and preserve folder, uid, and uidValidity handles.";
 
 export const readOnlyAnnotations = { readOnlyHint: true } as const;
 export const draftWriteAnnotations = {
@@ -24,6 +24,11 @@ const attachmentSchema = z.object({
   cid: z.string().optional(),
 });
 
+const messageHandleSchema = z.object({
+  folder: z.string(),
+  uid: z.number().int().positive(),
+});
+
 export const messageFields = {
   account: z.string(),
   to: z.string(),
@@ -35,6 +40,7 @@ export const messageFields = {
   attachments: z.array(attachmentSchema).optional(),
   inReplyTo: z.string().optional(),
   references: z.array(z.string()).optional(),
+  replySource: messageHandleSchema.optional(),
 } as const;
 
 export const checkAccountsFields = {

@@ -2,7 +2,6 @@
 import process from 'node:process';
 import { Console, Effect } from 'effect';
 import type { MailError } from '../features/mail/errors/errors';
-import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
 import { storeVerifiedPassword } from '../features/mail/services/login';
@@ -10,6 +9,9 @@ import { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
 import { at, parseFlags } from '../shared/args';
 import { promptHidden } from '../shared/terminal';
+import { parseMessageHandle } from './cli-args';
+import { foldersCommand, searchCommand } from './cli-mail-commands';
+import { usage } from './cli-usage';
 import { appLayer } from './runtime';
 
 type Env = Imap | Secrets | MailConfig;
@@ -18,19 +20,6 @@ const cliArgs: ReadonlyArray<string> = Bun.argv.slice(2);
 const command: string = at(cliArgs, 0) ?? '';
 const account = at(cliArgs, 1);
 const tail = cliArgs.slice(2);
-
-const usage = (knownAccounts: string): string => `mail — draft-only IMAP helper
-
-Commands:
-  mail login <email>                       verify and store password (hidden prompt)
-  mail accounts                            list configured accounts
-  mail status [email] [--quick]            check auth per account (--quick: keyring only)
-  mail folders <email>                     list folders
-  mail search <email> <query...>           search (newest first)
-  mail read <email> <folder> <uid>         print one message
-  mail draft <email> --to <addr> --subject <s> [--cc <addr>] [--in-reply-to <id>]   body from stdin
-
-Accounts: ${knownAccounts}`;
 
 // Failure contract: every error path — typed MailErrors, unknown accounts,
 // usage mistakes, and accounts that fail `mail status` — exits non-zero so
@@ -69,27 +58,6 @@ const loginCommand = (
     );
   });
 
-const foldersCommand = (email: string): Effect.Effect<void, MailError, Imap> =>
-  Effect.gen(function* () {
-    const imap = yield* Imap;
-    const folders = yield* imap.listFolders(email);
-    yield* Console.log(JSON.stringify(folders, null, 2));
-  });
-
-const searchCommand = (
-  email: string,
-  terms: ReadonlyArray<string>,
-): Effect.Effect<void, MailError, Imap> =>
-  Effect.gen(function* () {
-    const imap = yield* Imap;
-    const hits = yield* imap.search(email, {
-      folder: 'INBOX',
-      query: terms.length > 0 ? terms.join(' ') : undefined,
-      limit: defaultSearchLimit,
-    });
-    yield* Console.log(JSON.stringify(hits, null, 2));
-  });
-
 const readCommand = (
   email: string,
   folder: string | undefined,
@@ -121,6 +89,11 @@ const draftCommand = (
       yield* fail('Draft body is empty — pipe the body via stdin.');
       return;
     }
+    const replySource = parseMessageHandle(flags, 'reply');
+    if (replySource._tag === 'invalid') {
+      yield* fail(replySource.message);
+      return;
+    }
     const imap = yield* Imap;
     const location = yield* imap.saveDraft({
       account: email,
@@ -129,6 +102,7 @@ const draftCommand = (
       subject: flags.get('subject') ?? '',
       text: body,
       inReplyTo: flags.get('in-reply-to'),
+      replySource: replySource.handle,
     });
     yield* Console.log(`Draft saved to "${location.folder}".`);
   });

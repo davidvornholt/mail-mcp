@@ -5,7 +5,7 @@ Draft-only IMAP helper, exposed two ways over one Effect core:
 - **MCP server** (`src/app/server.ts`) — Codex, Claude, or another compatible client searches, reads, and creates, updates, or deletes drafts.
 - **CLI** (`src/app/cli.ts`, the `mail` bin) — login, status, folder/search/read, and plain-text draft creation from your terminal.
 
-The MCP tools support plain-text or HTML bodies and local file attachments, including inline images referenced from HTML by `cid`. Draft updates and deletion use a folder and UID and refuse to modify messages outside the account's Drafts folder; passing back the `uidValidity` from a draft's save response guards against a mailbox reindex expunging the wrong message. There is no send operation: drafts sync into Thunderbird for review and sending.
+The MCP tools support plain-text or HTML bodies and local file attachments, including inline images referenced from HTML by `cid`. Pass a read message's folder and UID as `replySource` when drafting a reply; the service copies that message into the body as quoted conversation and derives the threading headers from it. Those derived headers take precedence over manual `inReplyTo` and `references` values, which remain available for callers without a source handle. Draft updates and deletion use a folder and UID and refuse to modify messages outside the account's Drafts folder; passing back the `uidValidity` from a draft's save response guards against a mailbox reindex expunging the wrong message. There is no send operation: drafts sync into Thunderbird for review and sending.
 
 ## Commands
 
@@ -17,7 +17,7 @@ mail status [email] [--quick]          # check auth per account (--quick: keyrin
 mail folders <email>                   # list folders
 mail search <email> <query...>         # search, newest first
 mail read <email> <folder> <uid>       # print one message
-echo "body" | mail draft <email> --to a@b.com --subject "Re: x" [--cc c@d.com] [--in-reply-to <id>]
+echo "body" | mail draft <email> --to a@b.com --subject "Re: x" [--cc c@d.com] [--reply-folder <folder> --reply-uid <uid>] [--in-reply-to <id>]
 ```
 
 Run the MCP server with `bun run src/app/server.ts` (see the repo root README for registering it with Codex or Claude Code). The server publishes concise workflow instructions and marks read-only, draft-writing, and destructive tools with MCP safety annotations so supporting clients can apply appropriate approval behavior.

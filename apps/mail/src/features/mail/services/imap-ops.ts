@@ -81,6 +81,7 @@ const toFullMessage = (
   subject: parsed.subject ?? '',
   date: parsed.date?.toISOString() ?? '',
   messageId: parsed.messageId ?? '',
+  inReplyTo: parsed.inReplyTo ?? '',
   references: toReferences(parsed.references),
   text: parsed.text ?? '',
   html: typeof parsed.html === 'string' ? parsed.html : null,
