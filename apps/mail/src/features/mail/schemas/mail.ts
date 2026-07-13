@@ -32,9 +32,15 @@ export type FullMessage = {
   readonly subject: string;
   readonly date: string;
   readonly messageId: string;
+  readonly inReplyTo: string;
   readonly references: ReadonlyArray<string>;
   readonly text: string;
   readonly html: string | null;
+};
+
+export type MessageHandle = {
+  readonly folder: string;
+  readonly uid: number;
 };
 
 export type DraftInput = {
@@ -48,6 +54,7 @@ export type DraftInput = {
   readonly bcc?: string;
   readonly inReplyTo?: string;
   readonly references?: ReadonlyArray<string>;
+  readonly replySource?: MessageHandle;
 };
 
 export type MailAttachment = {
