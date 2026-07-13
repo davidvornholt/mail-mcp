@@ -2,14 +2,17 @@
 
 This file is the root operating contract for agents in this repository. Keep root instructions for non-negotiable constraints; put specialized workflows in `.agents/skills/*/SKILL.md`.
 
-Quality gates (lint, types, tests, a11y) are deliberately strict so agents can verify changes mechanically instead of declaring them done. Strengthen gates when you can; never weaken one to make a change pass.
+Quality gates (lint, types, tests, a11y) are deliberately strict so agents can verify changes mechanically instead of declaring them done. Strengthen gates when you can; never weaken one to make a change pass. CI gating jobs must fail closed — a gate that errors or cannot find the run it depends on fails, never passes by default — and a deploy job must not run unless the quality gate passed for the exact commit being deployed.
 
 Check an expensive or irreversible operation's cheap preconditions before starting it, so work already certain to fail does so before paying its setup cost. This is distinct from validation, which must still gather and report all errors together.
+
+Treat duplication as a design signal: when a change needs to copy configuration, environment, or logic that another component already owns, stop — the responsibility is probably misplaced. Fix the owner or move the need instead of pasting the copy; if the duplication seems forced by the architecture, surface that instead of proceeding.
 
 ## Research first
 
 - Check whether the request conflicts with repo architecture or standards.
 - Ask before broad product, UX, architectural, naming, workflow, scope, or business-logic decisions.
+- Propose before changing CI workflows, quality gates, or canonical synced files, even to unblock a failure. The file class is the trigger, not whether the change feels architectural.
 - Prefer cleaner architecture when justified. Do not preserve messy code only to avoid churn.
 
 ## Skill routing
@@ -19,6 +22,10 @@ Before generating code, inspect the `description` frontmatter for every local sk
 ## Subagents
 
 - Delegate liberally to subagents for work where only the conclusion matters — broad searches, stale-reference sweeps, verification passes, independent parallel changes. Spending extra tokens to keep the main context lean is the right trade in this repo.
+
+## Pull requests
+
+- Changes land on main through squash-merged PRs. The PR title becomes the commit subject on main, so it must be a Conventional Commit subject (`<type>(scope): <imperative description>`); CI lints it. Branch commit messages carry no format requirement.
 
 ## Package management
 
@@ -96,30 +103,9 @@ Before generating code, inspect the `description` frontmatter for every local sk
 - Internal logic should not use `async/await`; use `Effect.gen`.
 - Prefer Effect combinators for Effectful branching when they make control flow clearer.
 
-## Next.js notes
+## Writing style
 
-- Server Components, Route Handlers, and Server Actions may be `async`; bridge Effect programs with `await Effect.runPromise(program)`.
-- Use Next.js Cache Components patterns. Do not add route segment config (`runtime`, `dynamic`, `revalidate`, etc.). Use `'use cache'` plus `cacheLife`/`cacheTag` for cacheable async data, and Suspense/request-time APIs for genuinely dynamic content.
-
-## Frontend standards
-
-- Meet WCAG 2.2 AA with semantic HTML, correct heading hierarchy, keyboard navigation, visible focus states, and non-color-only communication.
-- Use framework metadata/document primitives for SEO and prefer server-rendered/indexable content when SEO matters.
 - Use sentence case where sensible for reader-facing text, including UI text, button labels, command-style actions, and Markdown headings, while preserving proper nouns, acronyms, filenames, package names, and domain terms.
-- Use browser hyphenation for long reader-facing text, and add manual soft hyphens only in curated display copy where wrapping needs help. Use `&shy;` in markup or `\u00AD` in string literals where entities are not decoded; avoid both in identifiers, URLs, form values, searchable data, tests, and accessibility labels.
-- Define color tokens and authored CSS colors with `oklch(...)`.
-
-## Accessibility testing
-
-- Browser-rendered apps must have Playwright + Axe coverage asserting zero violations against the full WCAG 2.2 AA tag set.
-- Keep the Axe scan helper and Playwright config factory in `packages/a11y-testing`; app-local `a11y/*.a11y.ts` specs stay thin lists of routes and states.
-- Cover every reachable route and meaningful interaction states (open menus, dialogs, expanded/error states).
-
-## State management
-
-- Keep state as local as practical. Use React local state for component-owned UI state.
-- Use Zustand by default for shared client-side UI/app state in React and Next.js.
-- Do not use Zustand as a server-data cache. If client-side remote data needs caching, refetching, invalidation, pagination, optimistic updates, or mutation coordination, propose TanStack Query before building custom store logic.
 
 ## Testing
 
@@ -142,11 +128,10 @@ For documentation-only changes, run a narrower verification when the full check 
 
 - Prefer self-documenting code.
 - Add comments only for non-obvious intent.
+- Do not hard-wrap Markdown prose; keep each paragraph or list item on one logical line.
 
 ## Project-specific rules
 
-This file is canonical and synced from the standards template — do not edit it
-locally. Project-specific rules that extend this contract live in
-`AGENTS.local.md`; add local guidance there instead.
+This file is canonical and synced from the standards template — do not edit it locally. Project-specific rules that extend this contract live in `AGENTS.local.md`; add local guidance there instead.
 
 @AGENTS.local.md
