@@ -19,7 +19,7 @@ const message: FullMessage = {
 
 describe('buildReplyContent', () => {
   it('adds a plain-text quotation without duplicating references', () => {
-    const result = buildReplyContent('It is.', undefined, message);
+    const result = buildReplyContent('It is.', '<p>It is.</p>', message);
 
     expect(result.text).toBe(
       [
@@ -50,7 +50,7 @@ describe('buildReplyContent', () => {
   });
 
   it('uses In-Reply-To as ancestry when References is absent', () => {
-    const result = buildReplyContent('It is.', undefined, {
+    const result = buildReplyContent('It is.', '<p>It is.</p>', {
       ...message,
       references: [],
     });

@@ -1,19 +1,12 @@
 import type { FullMessage } from '../schemas/mail';
+import { escapeHtml } from './text-to-html';
 
 type ReplyContent = {
   readonly text: string;
-  readonly html: string | undefined;
+  readonly html: string;
   readonly inReplyTo: string | undefined;
   readonly references: ReadonlyArray<string>;
 };
-
-const escapeHtml = (value: string): string =>
-  value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
 
 const attributionFor = (message: FullMessage): string => {
   if (message.date !== '' && message.from !== '') {
@@ -50,16 +43,13 @@ const threadReferences = (message: FullMessage): ReadonlyArray<string> => {
 
 export const buildReplyContent = (
   text: string,
-  html: string | undefined,
+  html: string,
   message: FullMessage,
 ): ReplyContent => {
   const attribution = attributionFor(message);
   return {
     text: `${text.trimEnd()}\n\n${attribution}\n${quotePlainText(message.text)}`,
-    html:
-      html === undefined
-        ? undefined
-        : `${html.trimEnd()}\n<p>${escapeHtml(attribution)}</p>\n<blockquote type="cite">${quoteHtmlText(message.text)}</blockquote>`,
+    html: `${html.trimEnd()}\n<p>${escapeHtml(attribution)}</p>\n<blockquote type="cite">${quoteHtmlText(message.text)}</blockquote>`,
     inReplyTo: message.messageId === '' ? undefined : message.messageId,
     references: threadReferences(message),
   };
