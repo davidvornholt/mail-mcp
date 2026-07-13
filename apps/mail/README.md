@@ -20,7 +20,7 @@ mail read <email> <folder> <uid>       # print one message
 echo "body" | mail draft <email> --to a@b.com --subject "Re: x" [--cc c@d.com] [--reply-folder <folder> --reply-uid <uid>] [--in-reply-to <id>]
 ```
 
-Run the MCP server with `bun run src/app/server.ts` (see the repo root README for registering it with Codex or Claude Code). The server publishes concise workflow instructions and marks read-only, draft-writing, and destructive tools with MCP safety annotations so supporting clients can apply appropriate approval behavior.
+Run the MCP server with `bun run src/app/server.ts` (see the repo root README for registering it with Codex or Claude Code). The server publishes concise workflow and composition instructions (drafting requests are intent, not dictation: the client model should compose a polished email from the user's raw notes) and marks read-only, draft-writing, and destructive tools with MCP safety annotations so supporting clients can apply appropriate approval behavior.
 
 ## Configuration
 

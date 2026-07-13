@@ -140,7 +140,7 @@ server.registerTool(
 server.registerTool(
   'save_draft',
   {
-    description: `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). An HTML alternative is generated from 'text' automatically; pass 'html' only for custom markup. For replies pass replySource with the folder + uid from read_message; the original conversation is quoted in the body and its threading headers are preserved automatically. replySource-derived headers take precedence over manual inReplyTo + references. Accounts: ${accountList}`,
+    description: `Compose an email/reply and SAVE IT AS A DRAFT (does NOT send; the user reviews and sends from Thunderbird). The user's instructions are intent, not dictation: write an excellent, complete email in their voice, freely rewording and reordering their raw notes to fit the context; copy their exact wording only when they explicitly dictate it. An HTML alternative is generated from 'text' automatically; pass 'html' only for custom markup. For replies pass replySource with the folder + uid from read_message; the original conversation is quoted in the body and its threading headers are preserved automatically. replySource-derived headers take precedence over manual inReplyTo + references. Accounts: ${accountList}`,
     inputSchema: messageFields,
     annotations: draftWriteAnnotations,
   },
@@ -161,7 +161,7 @@ server.registerTool(
 server.registerTool(
   'update_draft',
   {
-    description: `Replace an existing draft identified by its drafts folder + uid. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
+    description: `Replace an existing draft identified by its drafts folder + uid. Compose the replacement to the same standard as save_draft: the user's instructions are intent, not dictation. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
     inputSchema: updateDraftFields,
     annotations: draftReplacementAnnotations,
   },
