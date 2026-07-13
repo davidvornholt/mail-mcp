@@ -1,4 +1,4 @@
 interface:
   display_name: "Declarative Infrastructure"
-  short_description: "Set up and change pinned declarative infrastructure"
-  default_prompt: "Use $declarative-infra to set up or change this repository's infrastructure safely."
+  short_description: "Operating contract for NixOS/OpenTofu infrastructure"
+  default_prompt: "Use $declarative-infra when touching infrastructure, even if its home is another repo."

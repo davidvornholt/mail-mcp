@@ -8,8 +8,7 @@
     ".agents/skills/database",
     ".agents/skills/declarative-infra",
     ".agents/skills/frontend-design",
-    ".agents/skills/git-commit",
-    ".agents/skills/github-actions",
+    ".agents/skills/nextjs",
     ".agents/skills/review",
     ".agents/skills/review-loop",
     ".agents/skills/standards-sync",
@@ -18,10 +17,11 @@
     ".claude/workflows/review-pass.js",
     ".codex/agents/reviewer.toml",
     "biome.base.jsonc",
+    ".github/settings.json",
     "packages/typescript-config",
     "packages/a11y-testing",
-    "standards.just",
     ".github/workflows/standards.yml",
-    ".github/workflows/standards-sync.yml"
+    ".github/workflows/standards-sync.yml",
+    ".github/workflows/pr-title.yml"
   ]
 }

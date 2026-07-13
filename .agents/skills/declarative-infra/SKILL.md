@@ -1,27 +1,24 @@
 ---
 name: declarative-infra
-description: Set up and safely change opinionated declarative infrastructure using davidvornholt/declarative-infra. Use when bootstrapping a repository's NixOS or OpenTofu layout, consuming or updating the shared modules, editing host configuration, or changing related GitHub convergence workflows.
+description: Operating contract for declarative infrastructure (NixOS hosts, OpenTofu stacks). Use when touching host configuration, flakes, secrets or deploy wiring, or cloud resources (DNS, buckets) — even when the infrastructure's home is another repo.
 ---
 
 # Declarative infrastructure
 
-Apply configuration and infrastructure by pushing changes to GitHub and letting the configured automation converge them. Do not apply changes directly. Avoid direct mutation commands such as `deploy-rs`, `tofu apply`, or `nixos-rebuild switch`. Use direct application only for an emergency.
+## Model
 
-Reusable building blocks live in [davidvornholt/declarative-infra](https://github.com/davidvornholt/declarative-infra) and are consumed pinned: NixOS modules (`davidvornholt.*` options) through a flake input, OpenTofu child modules through `?ref=` module sources. Improve generic modules upstream in declarative-infra; keep host, app, secret, and state specifics in the consuming repo.
+- Infrastructure has exactly one home per host: an `infra/` directory in the repo the host serves, or — usually when one host serves apps from several repos — a dedicated infra repo. If this repo is not that home, make infrastructure changes (virtual hosts, databases, DNS, buckets) in the home repo.
+- Apply changes by pushing to GitHub and letting trusted main-branch automation converge. Never run `deploy-rs`, `tofu apply`, or `nixos-rebuild switch` by hand; direct mutation is for emergencies only, and must be flagged when used.
 
-## Set up a consumer
+## Changing existing infrastructure
 
-1. Inspect existing infrastructure first. Preserve working host definitions, state, imports, secrets, and deployment workflows.
-2. Keep the consumer as the source of truth for flake composition and locks, hardware and disko configuration, SOPS recipients and encrypted secrets, OpenTofu root stacks and backends, application modules, and deployment topology.
-3. Add `github:davidvornholt/declarative-infra` as a flake input, make its `nixpkgs` and `treefmt-nix` inputs follow the consumer when those inputs already exist, and import `nixosModules.default` before local host/application modules.
-4. Enable only the opinionated `davidvornholt.*` modules the host needs. Do not add hypothetical options or split modules merely to make them generally configurable.
-5. Consume OpenTofu child modules from tagged `?ref=` sources. Keep provider configuration, credentials, backend, state, imports, and `moved` blocks in the consumer root stack.
-6. Wire pull requests to evaluate/build and plan without mutation; let trusted main-branch automation perform convergence.
+- Restructuring tofu resources uses `moved` blocks; adopting existing resources uses `import` blocks; both stay in the repo as history. Any migration or refactor must show a no-op plan before merging.
+- Removing a data-bearing resource (bucket, database, volume) is a deliberate two-step — lift `prevent_destroy`, then destroy — never a plan side effect.
 
-## Change a shared module
+## Validation
 
-Treat current opinions as part of the contract. Change or parameterize one only when a real consumer requirement conflicts with it. Add a contract evaluation for the intended behavior, change the module upstream, validate it there, then update the consumer pin in a separate reviewable change.
+Non-mutating gates before pushing: `nix flake check`, build the host toplevel, `tofu fmt -check`, `tofu init -backend=false && tofu validate`, and `tofu plan` where credentials exist. Never let validation become an apply.
 
-## Validate
+## Bootstrap
 
-Run non-mutating gates: `nix flake check`, relevant Nix builds or dry activation, `tofu fmt -check`, `tofu init -backend=false`, `tofu validate`, and plans where credentials are available. Never turn validation into an apply.
+Creating a new host, repo, or first cloud stack — read `references/bootstrap.md`.
