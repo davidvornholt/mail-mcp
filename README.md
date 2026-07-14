@@ -2,7 +2,7 @@
 
 > Built on [davidvornholt/standards](https://github.com/davidvornholt/standards).
 
-A draft-only IMAP helper for Thunderbird workflows, exposed to Codex, Claude, and other compatible clients as an **MCP server** and to you as a **`mail` CLI** over one shared Effect core. Through the MCP server it can search and read mail and create, update, or delete drafts with HTML and attachments; the `mail` CLI covers login, status, folder/search/read, and plain-text draft creation. It cannot send emails: drafts sync into Thunderbird for review and sending.
+A draft-only IMAP helper for Thunderbird workflows, exposed to Codex, Claude, and other compatible clients as an **MCP server** and to you as a **`mail` CLI** over one shared Effect core. Through the MCP server it can search and read mail and received attachments, and create, update, or delete drafts with HTML and attachments; the `mail` CLI covers login, status, folder/search/read, and plain-text draft creation. It cannot send emails: drafts sync into Thunderbird for review and sending.
 
 ## Layout
 

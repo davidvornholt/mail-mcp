@@ -96,6 +96,7 @@ describe('buildMime', () => {
         references: ['<first@example.com>'],
         text: 'First line\n\nSecond line',
         html: '<p>First line</p><img src="https://example.com/pixel">',
+        attachments: [],
       },
     );
 

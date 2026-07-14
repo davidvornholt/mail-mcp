@@ -3,6 +3,8 @@ import type { ImapFlow, ListResponse } from 'imapflow';
 import { type AddressObject, type ParsedMail, simpleParser } from 'mailparser';
 import { ImapError, MessageNotFoundError } from '../errors/errors';
 import type { FolderInfo, FullMessage } from '../schemas/mail';
+import { listAttachments } from './attachment-metadata';
+import { lockMailbox } from './mailbox-lock';
 
 export const imapError =
   (label: string) =>
@@ -53,19 +55,8 @@ const toFullMessage = (
   references: toReferences(parsed.references),
   text: parsed.text ?? '',
   html: typeof parsed.html === 'string' ? parsed.html : null,
+  attachments: [],
 });
-
-export const lockMailbox = (client: ImapFlow, folder: string) =>
-  Effect.acquireRelease(
-    Effect.tryPromise({
-      try: () => client.getMailboxLock(folder),
-      catch: imapError(`lock ${folder}`),
-    }),
-    (lock) =>
-      Effect.sync(() => {
-        lock.release();
-      }),
-  );
 
 export const listFolders = (
   client: ImapFlow,
@@ -93,7 +84,7 @@ export const readMessage = (
       try: () =>
         client.fetchOne(
           String(uid),
-          { uid: true, source: true, envelope: true },
+          { uid: true, source: true, envelope: true, bodyStructure: true },
           { uid: true },
         ),
       catch: imapError('fetch message'),
@@ -112,5 +103,8 @@ export const readMessage = (
       try: () => simpleParser(source),
       catch: imapError('parse message'),
     });
-    return toFullMessage(parsed, folder, uid);
+    return {
+      ...toFullMessage(parsed, folder, uid),
+      attachments: listAttachments(message.bodyStructure),
+    };
   }).pipe(Effect.scoped);

@@ -50,6 +50,20 @@ export type FullMessage = {
   readonly references: ReadonlyArray<string>;
   readonly text: string;
   readonly html: string | null;
+  readonly attachments: ReadonlyArray<MessageAttachment>;
+};
+
+export type MessageAttachment = {
+  readonly part: string;
+  readonly filename: string | null;
+  readonly contentType: string;
+  readonly size: number | null;
+  readonly disposition: string | null;
+  readonly contentId: string | null;
+};
+
+export type AttachmentContent = MessageAttachment & {
+  readonly content: Uint8Array;
 };
 
 export type MessageHandle = {

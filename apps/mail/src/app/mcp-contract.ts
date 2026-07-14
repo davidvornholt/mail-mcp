@@ -1,8 +1,11 @@
 import { z } from 'zod';
-import { searchScopes } from '../features/mail/schemas/mail';
+import {
+  type AttachmentContent,
+  searchScopes,
+} from '../features/mail/schemas/mail';
 
 export const serverInstructions =
-  "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message and preserve folder, uid, and uidValidity handles.";
+  "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve folder, uid, and uidValidity handles.";
 
 export const searchMailDescription = (accounts: string): string =>
   `Search mail globally by default, one exact folder with scope='folder', or a folder plus descendants with scope='subtree'. Folder-based searches require an explicit scope. Global search prefers the server's all-mail mailbox; its fallback includes Inbox, Archive, Sent, and custom mail folders while excluding Drafts, Junk, Trash, and duplicate virtual folders. 'query' matches subject/body/from/to text; narrow with 'from'/'subject'/'since' (ISO date). Results are globally newest-first and return folder+uid handles for read_message. Accounts: ${accounts}`;
@@ -75,6 +78,42 @@ export const readMessageFields = {
   folder: z.string(),
   uid: z.number().int().positive(),
 } as const;
+export const readAttachmentFields = {
+  ...readMessageFields,
+  part: z.string().regex(/^[1-9]\d*(?:\.[1-9]\d*)*$/u),
+} as const;
+
+type AttachmentHandle = {
+  readonly account: string;
+  readonly folder: string;
+  readonly uid: number;
+};
+
+export const attachmentResult = (
+  handle: AttachmentHandle,
+  attachment: AttachmentContent,
+) => {
+  const { content, ...metadata } = attachment;
+  const uri = new URL('mail-attachment://message');
+  uri.searchParams.set('account', handle.account);
+  uri.searchParams.set('folder', handle.folder);
+  uri.searchParams.set('uid', String(handle.uid));
+  uri.searchParams.set('part', attachment.part);
+  return {
+    content: [
+      { type: 'text' as const, text: JSON.stringify(metadata, null, 2) },
+      {
+        type: 'resource' as const,
+        resource: {
+          uri: uri.toString(),
+          mimeType: attachment.contentType,
+          blob: Buffer.from(content).toString('base64'),
+        },
+      },
+    ],
+    structuredContent: metadata,
+  };
+};
 
 const draftLocationFields = {
   folder: z.string(),

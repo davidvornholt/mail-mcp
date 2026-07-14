@@ -3,6 +3,7 @@ import { ImapFlow } from 'imapflow';
 import { ImapError, type MailError } from '../errors/errors';
 import type { Account } from '../schemas/account';
 import type {
+  AttachmentContent,
   DraftInput,
   DraftLocation,
   FolderInfo,
@@ -11,6 +12,7 @@ import type {
   SearchOptions,
   UpdateDraftInput,
 } from '../schemas/mail';
+import { readAttachment } from './attachment';
 import { MailConfig } from './config';
 import { removeDraft, replaceDraft, writeDraft } from './draft';
 import { listFolders, readMessage } from './imap-ops';
@@ -121,6 +123,15 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
       ): Effect.Effect<FullMessage, MailError> =>
         clientFor(email).pipe(
           Effect.flatMap((client) => readMessage(client, folder, uid)),
+        ),
+      readAttachment: (
+        email: string,
+        folder: string,
+        uid: number,
+        part: string,
+      ): Effect.Effect<AttachmentContent, MailError> =>
+        clientFor(email).pipe(
+          Effect.flatMap((client) => readAttachment(client, folder, uid, part)),
         ),
       saveDraft: (input: DraftInput): Effect.Effect<DraftLocation, MailError> =>
         Effect.gen(function* () {

@@ -5,6 +5,8 @@ Draft-only IMAP helper, exposed two ways over one Effect core:
 - **MCP server** (`src/app/server.ts`) — Codex, Claude, or another compatible client searches, reads, and creates, updates, or deletes drafts.
 - **CLI** (`src/app/cli.ts`, the `mail` bin) — login, status, folder/search/read, and plain-text draft creation from your terminal.
 
+`read_message` returns received-attachment metadata, including a stable IMAP body-part handle. Pass that handle with the message's account, folder, and UID to the read-only `read_attachment` MCP tool to retrieve only that decoded part as an embedded resource. Inline CID assets are listed too. Individual attachment reads are limited to 10 MiB.
+
 Every draft is saved with both a plain-text body and an HTML alternative: the HTML is derived from `text` automatically (escaped, with paragraphs and line breaks preserved) unless the caller passes custom `html`. Local file attachments are supported, including inline images referenced from HTML by `cid`. Pass a read message's folder and UID as `replySource` when drafting a reply; the service copies that message into the body as quoted conversation and derives the threading headers from it. Those derived headers take precedence over manual `inReplyTo` and `references` values, which remain available for callers without a source handle. Draft updates and deletion use a folder and UID and refuse to modify messages outside the account's Drafts folder; passing back the `uidValidity` from a draft's save response guards against a mailbox reindex expunging the wrong message. There is no send operation: drafts sync into Thunderbird for review and sending.
 
 ## Commands

@@ -2,8 +2,9 @@ import { Chunk, Effect, Stream } from 'effect';
 import type { FetchMessageObject, ImapFlow } from 'imapflow';
 import type { ImapError } from '../errors/errors';
 import type { SearchHit, SearchOptions } from '../schemas/mail';
-import { imapError, listMailboxes, lockMailbox } from './imap-ops';
+import { imapError, listMailboxes } from './imap-ops';
 import { buildSearchQuery } from './imap-query';
+import { lockMailbox } from './mailbox-lock';
 import { selectSearchFolders } from './search-folders';
 
 type SearchCandidate = {

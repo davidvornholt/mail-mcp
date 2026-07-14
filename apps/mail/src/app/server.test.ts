@@ -14,7 +14,7 @@ it(
 
     expect(client.getServerVersion()?.name).toBe('mail-mcp');
     expect(client.getInstructions()).toBe(
-      "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message and preserve folder, uid, and uidValidity handles.",
+      "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve folder, uid, and uidValidity handles.",
     );
 
     const { tools } = await client.listTools();
@@ -24,6 +24,7 @@ it(
       'list_folders',
       'search_mail',
       'read_message',
+      'read_attachment',
       'save_draft',
       'update_draft',
       'delete_draft',
@@ -36,6 +37,7 @@ it(
       { name: 'list_folders', annotations: { readOnlyHint: true } },
       { name: 'search_mail', annotations: { readOnlyHint: true } },
       { name: 'read_message', annotations: { readOnlyHint: true } },
+      { name: 'read_attachment', annotations: { readOnlyHint: true } },
       {
         name: 'save_draft',
         annotations: { readOnlyHint: false, destructiveHint: false },
@@ -67,6 +69,12 @@ it(
       properties: {
         uid: { type: 'integer', exclusiveMinimum: 0 },
       },
+    });
+    expect(
+      tools.find((tool) => tool.name === 'read_attachment')?.inputSchema,
+    ).toMatchObject({
+      required: ['account', 'folder', 'uid', 'part'],
+      properties: { part: { type: 'string', pattern: expect.any(String) } },
     });
     expect(
       tools.find((tool) => tool.name === 'save_draft')?.inputSchema,
