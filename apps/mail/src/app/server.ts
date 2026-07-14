@@ -5,6 +5,7 @@ import type { MailError } from '../features/mail/errors/errors';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
+import { resolveSearchOptions } from '../features/mail/services/search-options';
 import { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
 import {
@@ -17,6 +18,7 @@ import {
   messageFields,
   readMessageFields,
   readOnlyAnnotations,
+  searchMailDescription,
   searchMailFields,
   serverInstructions,
   textResult,
@@ -26,12 +28,10 @@ import {
 type ToolEnv = Imap | Secrets | MailConfig;
 
 // Keep IMAP connections warm; the Imap layer finalizer closes them on disposal.
-// MailConfig and Secrets supply the account list and status checks.
 const runtime = ManagedRuntime.make(
   Layer.mergeAll(MailConfig.Default, Secrets.Default, Imap.Default),
 );
 
-// A startup config failure exits with the ConfigError message on stderr.
 const accountEmails = await runtime.runPromise(
   Effect.map(MailConfig, (config) => config.emails),
 );
@@ -101,22 +101,24 @@ server.registerTool(
 server.registerTool(
   'search_mail',
   {
-    description: `Search a mailbox: 'query' matches subject/body/from/to text, or narrow with 'from'/'subject'/'since' (ISO date). Returns folder+uid handles for read_message. Accounts: ${accountList}`,
+    description: searchMailDescription(accountList),
     inputSchema: searchMailFields,
     annotations: readOnlyAnnotations,
   },
-  ({ account, query, folder, from, subject, since, limit }) =>
+  ({ account, query, scope, folder, from, subject, since, limit }) =>
     runTool(
       Effect.gen(function* () {
         const imap = yield* Imap;
-        return yield* imap.search(account, {
-          folder: folder ?? 'INBOX',
+        const options = yield* resolveSearchOptions({
+          scope,
+          folder,
           query,
           from,
           subject,
           since,
           limit: limit ?? defaultSearchLimit,
         });
+        return yield* imap.search(account, options);
       }),
     ),
 );

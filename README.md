@@ -77,6 +77,8 @@ Once a password is stored, ask your MCP client to search your mail or compose a 
 mail search you@example.com invoice
 ```
 
+Search is global by default. Use `--scope folder --folder INBOX` for one exact folder or `--scope subtree --folder Projects` for a folder and its descendants.
+
 Not ready to link a global command? Every example also works as `bun run apps/mail/src/app/cli.ts <args>`.
 
 ## Requirements

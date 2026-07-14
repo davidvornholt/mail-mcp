@@ -1,27 +1,13 @@
-import { Chunk, Effect, Stream } from 'effect';
-import type { FetchMessageObject, ImapFlow, ListResponse } from 'imapflow';
+import { Effect } from 'effect';
+import type { ImapFlow, ListResponse } from 'imapflow';
 import { type AddressObject, type ParsedMail, simpleParser } from 'mailparser';
 import { ImapError, MessageNotFoundError } from '../errors/errors';
-import type {
-  FolderInfo,
-  FullMessage,
-  SearchHit,
-  SearchOptions,
-} from '../schemas/mail';
-import { buildSearchQuery } from './imap-query';
+import type { FolderInfo, FullMessage } from '../schemas/mail';
 
-const imapError =
+export const imapError =
   (label: string) =>
   (cause: unknown): ImapError =>
     new ImapError({ message: `${label} failed: ${String(cause)}` });
-
-const joinAddresses = (
-  list: ReadonlyArray<{ readonly address?: string }> | undefined,
-): string =>
-  (list ?? [])
-    .map((entry) => entry.address)
-    .filter((address): address is string => address !== undefined)
-    .join(', ');
 
 const addressText = (
   field: AddressObject | Array<AddressObject> | undefined,
@@ -43,30 +29,12 @@ const toReferences = (
   return Array.isArray(references) ? references : [references];
 };
 
-const toIsoDate = (value: Date | string | undefined): string =>
-  value instanceof Date ? value.toISOString() : (value ?? '');
-
 const toFolderInfo = (folder: ListResponse): FolderInfo => ({
   path: folder.path,
   name: folder.name,
   specialUse: folder.specialUse ?? null,
   subscribed: folder.subscribed,
 });
-
-const toSearchHit = (
-  message: FetchMessageObject,
-  folder: string,
-): SearchHit => {
-  const { envelope } = message;
-  return {
-    uid: message.uid,
-    folder,
-    from: joinAddresses(envelope?.from),
-    to: joinAddresses(envelope?.to),
-    subject: envelope?.subject ?? '',
-    date: toIsoDate(envelope?.date ?? message.internalDate),
-  };
-};
 
 const toFullMessage = (
   parsed: ParsedMail,
@@ -102,40 +70,17 @@ export const lockMailbox = (client: ImapFlow, folder: string) =>
 export const listFolders = (
   client: ImapFlow,
 ): Effect.Effect<ReadonlyArray<FolderInfo>, ImapError> =>
+  listMailboxes(client).pipe(
+    Effect.map((folders) => folders.map(toFolderInfo)),
+  );
+
+export const listMailboxes = (
+  client: ImapFlow,
+): Effect.Effect<ReadonlyArray<ListResponse>, ImapError> =>
   Effect.tryPromise({
     try: () => client.list(),
     catch: imapError('list folders'),
-  }).pipe(Effect.map((folders) => folders.map(toFolderInfo)));
-
-export const searchMailbox = (
-  client: ImapFlow,
-  options: SearchOptions,
-): Effect.Effect<ReadonlyArray<SearchHit>, ImapError> =>
-  Effect.gen(function* () {
-    yield* lockMailbox(client, options.folder);
-    const found = yield* Effect.tryPromise({
-      try: () => client.search(buildSearchQuery(options), { uid: true }),
-      catch: imapError('search'),
-    });
-    const uids = found === false ? [] : found;
-    if (uids.length === 0) {
-      return [];
-    }
-    const selected = uids.slice(-options.limit).reverse();
-    const messages = yield* Stream.runCollect(
-      Stream.fromAsyncIterable(
-        client.fetch(
-          selected,
-          { uid: true, envelope: true, internalDate: true },
-          { uid: true },
-        ),
-        imapError('fetch'),
-      ),
-    );
-    return Chunk.toReadonlyArray(messages).map((message) =>
-      toSearchHit(message, options.folder),
-    );
-  }).pipe(Effect.scoped);
+  });
 
 export const readMessage = (
   client: ImapFlow,

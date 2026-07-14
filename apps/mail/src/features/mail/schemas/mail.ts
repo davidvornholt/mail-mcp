@@ -5,13 +5,27 @@ export type FolderInfo = {
   readonly subscribed: boolean;
 };
 
-export type SearchOptions = {
-  readonly folder: string;
+export const searchScopes = ['all', 'folder', 'subtree'] as const;
+
+export type SearchScope = (typeof searchScopes)[number];
+
+type SearchCriteria = {
   readonly limit: number;
   readonly query?: string;
   readonly from?: string;
   readonly subject?: string;
   readonly since?: string;
+};
+
+export type SearchLocation =
+  | { readonly scope: 'all' }
+  | { readonly scope: 'folder' | 'subtree'; readonly folder: string };
+
+export type SearchOptions = SearchCriteria & SearchLocation;
+
+export type SearchOptionsInput = SearchCriteria & {
+  readonly scope?: SearchScope;
+  readonly folder?: string;
 };
 
 export type SearchHit = {

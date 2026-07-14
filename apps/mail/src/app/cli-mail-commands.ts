@@ -2,6 +2,8 @@ import { Console, Effect } from 'effect';
 import type { MailError } from '../features/mail/errors/errors';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { Imap } from '../features/mail/services/imap';
+import { resolveSearchOptions } from '../features/mail/services/search-options';
+import type { ParsedSearchArgs } from './cli-args';
 
 export const foldersCommand = (
   email: string,
@@ -14,14 +16,14 @@ export const foldersCommand = (
 
 export const searchCommand = (
   email: string,
-  terms: ReadonlyArray<string>,
+  input: Extract<ParsedSearchArgs, { readonly _tag: 'valid' }>['input'],
 ): Effect.Effect<void, MailError, Imap> =>
   Effect.gen(function* () {
     const imap = yield* Imap;
-    const hits = yield* imap.search(email, {
-      folder: 'INBOX',
-      query: terms.length > 0 ? terms.join(' ') : undefined,
+    const options = yield* resolveSearchOptions({
+      ...input,
       limit: defaultSearchLimit,
     });
+    const hits = yield* imap.search(email, options);
     yield* Console.log(JSON.stringify(hits, null, 2));
   });

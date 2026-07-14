@@ -1,5 +1,35 @@
 import { describe, expect, it } from 'bun:test';
-import { parseMessageHandle } from './cli-args';
+import { parseMessageHandle, parseSearchArgs } from './cli-args';
+
+describe('parseSearchArgs', () => {
+  it('keeps positional terms and parses folder scope flags', () => {
+    expect(
+      parseSearchArgs([
+        'quarterly',
+        '--scope',
+        'subtree',
+        '--folder',
+        'Projects',
+        'invoice',
+      ]),
+    ).toEqual({
+      _tag: 'valid',
+      input: {
+        scope: 'subtree',
+        folder: 'Projects',
+        query: 'quarterly invoice',
+      },
+    });
+  });
+
+  it('rejects unsupported scopes', () => {
+    expect(parseSearchArgs(['--scope', 'recursive'])._tag).toBe('invalid');
+  });
+
+  it('rejects unknown flags', () => {
+    expect(parseSearchArgs(['--recursive'])._tag).toBe('invalid');
+  });
+});
 
 describe('parseMessageHandle', () => {
   it('parses a complete positive message handle', () => {
