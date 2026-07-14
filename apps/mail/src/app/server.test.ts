@@ -56,6 +56,7 @@ it(
     expect(searchSchema).toMatchObject({
       properties: {
         limit: { type: 'integer', exclusiveMinimum: 0 },
+        scope: { type: 'string', enum: ['all', 'folder', 'subtree'] },
       },
     });
     expect(

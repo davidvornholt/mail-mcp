@@ -15,12 +15,16 @@ mail accounts                          # list configured accounts
 mail status [email] [--quick]          # check auth per account (--quick: keyring only, no connect)
                                        # exits non-zero if any checked account fails
 mail folders <email>                   # list folders
-mail search <email> <query...>         # search, newest first
+mail search <email> <query...>         # search all user mail, newest first
+mail search <email> --scope folder --folder INBOX <query...>
+mail search <email> --scope subtree --folder Projects <query...>
 mail read <email> <folder> <uid>       # print one message
 echo "body" | mail draft <email> --to a@b.com --subject "Re: x" [--cc c@d.com] [--reply-folder <folder> --reply-uid <uid>] [--in-reply-to <id>]
 ```
 
 Run the MCP server with `bun run src/app/server.ts` (see the repo root README for registering it with Codex or Claude Code). The server publishes concise workflow and composition instructions (drafting requests are intent, not dictation: the client model should compose a polished email from the user's raw notes) and marks read-only, draft-writing, and destructive tools with MCP safety annotations so supporting clients can apply appropriate approval behavior.
+
+Search is global when `scope` is omitted or set to `all`. It prefers the IMAP server's all-mail mailbox; otherwise it searches selectable Inbox, Archive, Sent, and custom folders while excluding Drafts, Junk, Trash, and duplicate virtual folders. Use `scope: "folder"` with `folder` for one exact mailbox, or `scope: "subtree"` with `folder` to include that mailbox and all selectable descendants. Folder-based searches always require an explicit scope. Results from multiple mailboxes are deduplicated, sorted newest-first, and limited globally.
 
 ## Configuration
 

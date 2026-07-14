@@ -26,6 +26,17 @@ export class ImapError extends Data.TaggedError('ImapError')<{
   readonly message: string;
 }> {}
 
+export class SearchInputError extends Data.TaggedError('SearchInputError')<{
+  readonly message: string;
+}> {}
+
+export class FolderNotFoundError extends Data.TaggedError(
+  'FolderNotFoundError',
+)<{
+  readonly folder: string;
+  readonly message: string;
+}> {}
+
 export class MessageNotFoundError extends Data.TaggedError(
   'MessageNotFoundError',
 )<{
@@ -50,6 +61,8 @@ export type MailError =
   | MissingPasswordError
   | KeyringError
   | ImapError
+  | SearchInputError
+  | FolderNotFoundError
   | MessageNotFoundError
   | DraftError
   | StaleUidError;

@@ -9,7 +9,7 @@ import { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
 import { at, parseFlags } from '../shared/args';
 import { promptHidden } from '../shared/terminal';
-import { parseMessageHandle } from './cli-args';
+import { parseMessageHandle, parseSearchArgs } from './cli-args';
 import { foldersCommand, searchCommand } from './cli-mail-commands';
 import { usage } from './cli-usage';
 import { appLayer } from './runtime';
@@ -160,7 +160,12 @@ const program: Effect.Effect<void, MailError, Env> = Effect.gen(function* () {
     case 'folders':
       return yield* withAccount(account, foldersCommand);
     case 'search':
-      return yield* withAccount(account, (value) => searchCommand(value, tail));
+      return yield* withAccount(account, (value) => {
+        const parsed = parseSearchArgs(tail);
+        return parsed._tag === 'invalid'
+          ? fail(parsed.message)
+          : searchCommand(value, parsed.input);
+      });
     case 'read':
       return yield* withAccount(account, (value) =>
         readCommand(value, at(tail, 0), at(tail, 1)),

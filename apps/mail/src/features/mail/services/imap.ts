@@ -13,7 +13,8 @@ import type {
 } from '../schemas/mail';
 import { MailConfig } from './config';
 import { removeDraft, replaceDraft, writeDraft } from './draft';
-import { listFolders, readMessage, searchMailbox } from './imap-ops';
+import { listFolders, readMessage } from './imap-ops';
+import { searchMailboxes } from './imap-search';
 import { Secrets } from './secrets';
 
 const closeClient = (client: ImapFlow): Effect.Effect<void> =>
@@ -111,7 +112,7 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
         options: SearchOptions,
       ): Effect.Effect<ReadonlyArray<SearchHit>, MailError> =>
         clientFor(email).pipe(
-          Effect.flatMap((client) => searchMailbox(client, options)),
+          Effect.flatMap((client) => searchMailboxes(client, options)),
         ),
       read: (
         email: string,

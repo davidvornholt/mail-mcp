@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 
-const cliPath = new URL('./cli.ts', import.meta.url).pathname;
-const fixturePath = new URL(
-  '../features/mail/services/accounts.fixture.toml',
-  import.meta.url,
-).pathname;
+const cliPath = Bun.fileURLToPath(new URL('./cli.ts', import.meta.url));
+const fixturePath = Bun.fileURLToPath(
+  new URL('../features/mail/services/accounts.fixture.toml', import.meta.url),
+);
 
 type CliResult = {
   readonly exitCode: number;
