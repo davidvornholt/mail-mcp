@@ -1,21 +1,21 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { Effect, Layer, ManagedRuntime } from 'effect';
-import type { MailError } from '../features/mail/errors/errors';
+import { Effect } from 'effect';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
 import { resolveSearchOptions } from '../features/mail/services/search-options';
-import { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
 import {
   accountFields,
+  attachmentResult,
   checkAccountsFields,
   deleteDraftFields,
   destructiveAnnotations,
   draftReplacementAnnotations,
   draftWriteAnnotations,
   messageFields,
+  readAttachmentFields,
   readMessageFields,
   readOnlyAnnotations,
   searchMailDescription,
@@ -24,28 +24,12 @@ import {
   textResult,
   updateDraftFields,
 } from './mcp-contract';
-
-type ToolEnv = Imap | Secrets | MailConfig;
-
-// Keep IMAP connections warm; the Imap layer finalizer closes them on disposal.
-const runtime = ManagedRuntime.make(
-  Layer.mergeAll(MailConfig.Default, Secrets.Default, Imap.Default),
-);
-
-const accountEmails = await runtime.runPromise(
-  Effect.map(MailConfig, (config) => config.emails),
-);
-const accountList = accountEmails.join(', ');
-
-const runTool = <A>(program: Effect.Effect<A, MailError, ToolEnv>) =>
-  runtime.runPromise(
-    program.pipe(
-      Effect.map((value) => textResult(JSON.stringify(value, null, 2))),
-      Effect.catchAll((error) =>
-        Effect.succeed(textResult(`Error: ${error.message}`, true)),
-      ),
-    ),
-  );
+import {
+  accountEmails,
+  accountList,
+  runTool,
+  runToolResult,
+} from './mcp-runtime';
 
 const server = new McpServer(
   { name: 'mail-mcp', version: '0.0.0' },
@@ -90,12 +74,7 @@ server.registerTool(
     annotations: readOnlyAnnotations,
   },
   ({ account }) =>
-    runTool(
-      Effect.gen(function* () {
-        const imap = yield* Imap;
-        return yield* imap.listFolders(account);
-      }),
-    ),
+    runTool(Effect.flatMap(Imap, (imap) => imap.listFolders(account))),
 );
 
 server.registerTool(
@@ -126,15 +105,32 @@ server.registerTool(
 server.registerTool(
   'read_message',
   {
-    description: `Read one full message by folder + uid (from search_mail). Accounts: ${accountList}`,
+    description: `Read one full message by folder + uid (from search_mail), including attachment metadata and part handles. Accounts: ${accountList}`,
     inputSchema: readMessageFields,
     annotations: readOnlyAnnotations,
   },
   ({ account, folder, uid }) =>
-    runTool(
+    runTool(Effect.flatMap(Imap, (imap) => imap.read(account, folder, uid))),
+);
+
+server.registerTool(
+  'read_attachment',
+  {
+    description: `Read one attachment identified by the part handle returned by read_message. Returns an embedded MCP resource and refuses attachments larger than 10 MiB. Accounts: ${accountList}`,
+    inputSchema: readAttachmentFields,
+    annotations: readOnlyAnnotations,
+  },
+  ({ account, folder, uid, part }) =>
+    runToolResult(
       Effect.gen(function* () {
         const imap = yield* Imap;
-        return yield* imap.read(account, folder, uid);
+        const attachment = yield* imap.readAttachment(
+          account,
+          folder,
+          uid,
+          part,
+        );
+        return attachmentResult({ account, folder, uid }, attachment);
       }),
     ),
 );
@@ -196,5 +192,4 @@ server.registerTool(
       }),
     ),
 );
-
 await server.connect(new StdioServerTransport());

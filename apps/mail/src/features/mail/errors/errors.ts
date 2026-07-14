@@ -45,6 +45,26 @@ export class MessageNotFoundError extends Data.TaggedError(
   readonly message: string;
 }> {}
 
+export class AttachmentNotFoundError extends Data.TaggedError(
+  'AttachmentNotFoundError',
+)<{
+  readonly folder: string;
+  readonly uid: number;
+  readonly part: string;
+  readonly message: string;
+}> {}
+
+export class AttachmentTooLargeError extends Data.TaggedError(
+  'AttachmentTooLargeError',
+)<{
+  readonly folder: string;
+  readonly uid: number;
+  readonly part: string;
+  readonly size: number;
+  readonly limit: number;
+  readonly message: string;
+}> {}
+
 export class DraftError extends Data.TaggedError('DraftError')<{
   readonly message: string;
 }> {}
@@ -64,5 +84,7 @@ export type MailError =
   | SearchInputError
   | FolderNotFoundError
   | MessageNotFoundError
+  | AttachmentNotFoundError
+  | AttachmentTooLargeError
   | DraftError
   | StaleUidError;

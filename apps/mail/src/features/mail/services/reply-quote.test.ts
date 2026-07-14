@@ -15,6 +15,7 @@ const message: FullMessage = {
   references: ['<first@example.com>', '<current@example.com>'],
   text: 'Is 2 < 3?\nYes & no.',
   html: '<img src="https://example.com/tracking-pixel">',
+  attachments: [],
 };
 
 describe('buildReplyContent', () => {

@@ -15,7 +15,8 @@ import type {
   UpdateDraftInput,
 } from '../schemas/mail';
 import { selectDraftsFolder } from './draft-folder';
-import { listFolders, lockMailbox, readMessage } from './imap-ops';
+import { listFolders, readMessage } from './imap-ops';
+import { lockMailbox } from './mailbox-lock';
 import { buildMime } from './mime';
 
 const readReplySource = (
