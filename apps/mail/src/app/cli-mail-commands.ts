@@ -15,7 +15,7 @@ export const foldersCommand = (
   });
 
 export const searchCommand = (
-  email: string,
+  email: string | undefined,
   input: Extract<ParsedSearchArgs, { readonly _tag: 'valid' }>['input'],
 ): Effect.Effect<void, MailError, Imap> =>
   Effect.gen(function* () {

@@ -48,6 +48,32 @@ describe('cli exit codes', () => {
   );
 
   it(
+    'unknown explicit search account exits before connecting',
+    () => {
+      const result = runCli(
+        ['search', '--account', 'nobody@example.com', 'invoice'],
+        fixturePath,
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('Unknown account');
+    },
+    subprocessTimeoutMs,
+  );
+
+  it(
+    'folder search without an account exits before connecting',
+    () => {
+      const result = runCli(
+        ['search', '--scope', 'folder', '--folder', 'INBOX', 'invoice'],
+        fixturePath,
+      );
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('requires an account');
+    },
+    subprocessTimeoutMs,
+  );
+
+  it(
     'usage banner exits zero',
     () => {
       const result = runCli([], fixturePath);

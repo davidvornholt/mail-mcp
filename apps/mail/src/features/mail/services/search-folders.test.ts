@@ -31,7 +31,7 @@ const folder = (
 };
 
 describe('selectSearchFolders', () => {
-  it('uses a selectable all-mail folder as the global search source', async () => {
+  it('uses a selectable all-mail folder for all-mail scope', async () => {
     const folders = [
       folder('INBOX', { specialUse: '\\Inbox' }),
       folder('All Mail', { specialUse: '\\All' }),

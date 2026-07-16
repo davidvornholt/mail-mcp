@@ -105,7 +105,7 @@ server.registerTool(
 server.registerTool(
   'read_message',
   {
-    description: `Read one full message by folder + uid (from search_mail), including attachment metadata and part handles. Accounts: ${accountList}`,
+    description: `Read one full message by account + folder + uid (from search_mail), including attachment metadata and part handles. Accounts: ${accountList}`,
     inputSchema: readMessageFields,
     annotations: readOnlyAnnotations,
   },

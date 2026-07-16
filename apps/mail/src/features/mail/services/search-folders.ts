@@ -3,7 +3,7 @@ import type { ListResponse } from 'imapflow';
 import { FolderNotFoundError } from '../errors/errors';
 import type { SearchLocation } from '../schemas/mail';
 
-const excludedGlobalSpecialUse = new Set([
+const excludedAllMailSpecialUse = new Set([
   '\\Drafts',
   '\\Flagged',
   '\\Junk',
@@ -35,7 +35,7 @@ const isSameOrDescendant = (
   );
 };
 
-const globalFolders = (
+const allMailFolders = (
   folders: ReadonlyArray<ListResponse>,
 ): ReadonlyArray<string> => {
   const allFolder = folders.find(
@@ -45,7 +45,7 @@ const globalFolders = (
     return [allFolder.path];
   }
   const excludedRoots = folders.filter((folder) =>
-    excludedGlobalSpecialUse.has(folder.specialUse ?? ''),
+    excludedAllMailSpecialUse.has(folder.specialUse ?? ''),
   );
   return folders
     .filter(
@@ -83,5 +83,5 @@ export const selectSearchFolders = (
   location: Exclude<SearchLocation, { readonly scope: 'folder' }>,
 ): Effect.Effect<ReadonlyArray<string>, FolderNotFoundError> =>
   location.scope === 'all'
-    ? Effect.succeed(globalFolders(folders))
+    ? Effect.succeed(allMailFolders(folders))
     : subtreeFolders(folders, location.folder);

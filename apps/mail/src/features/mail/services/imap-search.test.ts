@@ -87,11 +87,11 @@ describe('searchMailboxes', () => {
       }),
     );
     expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({ folder: 'INBOX', uid: 1 });
+    expect(hits[0]?.hit).toMatchObject({ folder: 'INBOX', uid: 1 });
     expect(events).toEqual(['lock:INBOX', 'release:INBOX']);
   });
 
-  it('merges, deduplicates, globally sorts, and limits fallback folder results', async () => {
+  it('merges, deduplicates, sorts, and limits fallback folder results', async () => {
     const events: Array<string> = [];
     const folders = [
       listedFolder('INBOX', '\\Inbox'),
@@ -114,7 +114,7 @@ describe('searchMailboxes', () => {
     const hits = await Effect.runPromise(
       searchMailboxes(client, { scope: 'all', query: 'mail', limit: 2 }),
     );
-    expect(hits.map(({ folder, uid }) => ({ folder, uid }))).toEqual([
+    expect(hits.map(({ hit: { folder, uid } }) => ({ folder, uid }))).toEqual([
       { folder: 'Archive', uid: 2 },
       { folder: 'Sent', uid: sentUid },
     ]);

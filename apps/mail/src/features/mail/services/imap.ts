@@ -8,10 +8,11 @@ import type {
   DraftLocation,
   FolderInfo,
   FullMessage,
-  SearchHit,
   SearchOptions,
+  SearchResult,
   UpdateDraftInput,
 } from '../schemas/mail';
+import { searchAccounts } from './account-search';
 import { readAttachment } from './attachment';
 import { MailConfig } from './config';
 import { removeDraft, replaceDraft, writeDraft } from './draft';
@@ -82,16 +83,18 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
         }),
       );
 
+    const searchMailbox = (email: string, options: SearchOptions) =>
+      clientFor(email).pipe(
+        Effect.flatMap((client) => searchMailboxes(client, options)),
+      );
+
     yield* Effect.addFinalizer(() =>
       Effect.flatMap(Ref.get(clients), closeAll),
     );
 
     return {
-      // Connect and authenticate without doing any work — succeeds once the
-      // account's stored password is accepted by its IMAP server.
       verify: (email: string): Effect.Effect<void, MailError> =>
         clientFor(email).pipe(Effect.asVoid),
-      // Check a candidate password without reading or changing the keyring.
       verifyCredentials: (
         email: string,
         password: string,
@@ -110,12 +113,16 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
       ): Effect.Effect<ReadonlyArray<FolderInfo>, MailError> =>
         clientFor(email).pipe(Effect.flatMap(listFolders)),
       search: (
-        email: string,
+        email: string | undefined,
         options: SearchOptions,
-      ): Effect.Effect<ReadonlyArray<SearchHit>, MailError> =>
-        clientFor(email).pipe(
-          Effect.flatMap((client) => searchMailboxes(client, options)),
-        ),
+      ): Effect.Effect<SearchResult, MailError> =>
+        searchAccounts({
+          accounts: config.emails,
+          account: email,
+          options,
+          validateAccount: config.getAccount,
+          searchMailbox,
+        }),
       read: (
         email: string,
         folder: string,

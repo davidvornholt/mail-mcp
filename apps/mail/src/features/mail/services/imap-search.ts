@@ -7,8 +7,9 @@ import { buildSearchQuery } from './imap-query';
 import { lockMailbox } from './mailbox-lock';
 import { selectSearchFolders } from './search-folders';
 
-type SearchCandidate = {
-  readonly hit: SearchHit;
+export type MailboxSearchHit = {
+  readonly hit: Omit<SearchHit, 'account'>;
+  readonly mailboxDeduplicationId: string;
   readonly messageId: string;
   readonly receivedAt: string;
 };
@@ -27,7 +28,7 @@ const toIsoDate = (value: Date | string | undefined): string =>
 const toCandidate = (
   message: FetchMessageObject,
   folder: string,
-): SearchCandidate => {
+): MailboxSearchHit => {
   const { envelope } = message;
   return {
     hit: {
@@ -38,7 +39,8 @@ const toCandidate = (
       subject: envelope?.subject ?? '',
       date: toIsoDate(envelope?.date ?? message.internalDate),
     },
-    messageId: message.emailId ?? envelope?.messageId ?? '',
+    mailboxDeduplicationId: message.emailId ?? envelope?.messageId ?? '',
+    messageId: envelope?.messageId ?? '',
     receivedAt: toIsoDate(message.internalDate ?? envelope?.date),
   };
 };
@@ -47,7 +49,7 @@ const searchOneFolder = (
   client: ImapFlow,
   folder: string,
   options: SearchOptions,
-): Effect.Effect<ReadonlyArray<SearchCandidate>, ImapError> =>
+): Effect.Effect<ReadonlyArray<MailboxSearchHit>, ImapError> =>
   Effect.gen(function* () {
     yield* lockMailbox(client, folder);
     const found = yield* Effect.tryPromise({
@@ -74,17 +76,17 @@ const searchOneFolder = (
     );
   }).pipe(Effect.scoped);
 
-const newestFirst = (left: SearchCandidate, right: SearchCandidate): number =>
+const newestFirst = (left: MailboxSearchHit, right: MailboxSearchHit): number =>
   right.receivedAt.localeCompare(left.receivedAt) ||
   right.hit.uid - left.hit.uid ||
   left.hit.folder.localeCompare(right.hit.folder);
 
 const uniqueCandidates = (
-  candidates: ReadonlyArray<SearchCandidate>,
-): ReadonlyArray<SearchCandidate> => {
+  candidates: ReadonlyArray<MailboxSearchHit>,
+): ReadonlyArray<MailboxSearchHit> => {
   const seenMessageIds = new Set<string>();
   return candidates.filter((candidate) => {
-    const messageId = candidate.messageId.trim().toLowerCase();
+    const messageId = candidate.mailboxDeduplicationId.trim().toLowerCase();
     if (messageId === '') {
       return true;
     }
@@ -112,5 +114,5 @@ export const searchMailboxes = (client: ImapFlow, options: SearchOptions) =>
     const sorted = matches.flat().sort(newestFirst);
     const candidates =
       options.scope === 'folder' ? sorted : uniqueCandidates(sorted);
-    return candidates.slice(0, options.limit).map(({ hit }) => hit);
+    return candidates.slice(0, options.limit);
   });

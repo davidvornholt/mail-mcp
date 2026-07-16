@@ -14,10 +14,37 @@ describe('parseSearchArgs', () => {
       ]),
     ).toEqual({
       _tag: 'valid',
+      account: undefined,
       input: {
         scope: 'subtree',
         folder: 'Projects',
         query: 'quarterly invoice',
+      },
+    });
+  });
+
+  it('parses an explicit account without treating it as a query term', () => {
+    expect(
+      parseSearchArgs(['--account', 'me@example.com', 'quarterly', 'invoice']),
+    ).toEqual({
+      _tag: 'valid',
+      account: 'me@example.com',
+      input: {
+        scope: undefined,
+        folder: undefined,
+        query: 'quarterly invoice',
+      },
+    });
+  });
+
+  it('treats a leading email address as an all-account query term', () => {
+    expect(parseSearchArgs(['me@example.com', 'invoice'])).toEqual({
+      _tag: 'valid',
+      account: undefined,
+      input: {
+        scope: undefined,
+        folder: undefined,
+        query: 'me@example.com invoice',
       },
     });
   });

@@ -29,12 +29,24 @@ export type SearchOptionsInput = SearchCriteria & {
 };
 
 export type SearchHit = {
+  readonly account: string;
   readonly uid: number;
   readonly folder: string;
   readonly from: string;
   readonly to: string;
   readonly subject: string;
   readonly date: string;
+};
+
+export type SearchFailure = {
+  readonly account: string;
+  readonly errorTag: string;
+  readonly message: string;
+};
+
+export type SearchResult = {
+  readonly hits: ReadonlyArray<SearchHit>;
+  readonly failures: ReadonlyArray<SearchFailure>;
 };
 
 export type FullMessage = {
