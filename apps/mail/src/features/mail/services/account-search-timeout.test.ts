@@ -1,84 +1,34 @@
 import { describe, expect, it } from 'bun:test';
 import { Effect, Fiber, TestClock, TestContext } from 'effect';
-import { ImapError } from '../errors/errors';
 import { searchAllAccounts } from './account-search';
-import { mailboxHit, searchOptions } from './account-search.fixture';
-import { makeClientPool, withClientSearchDeadline } from './imap-client';
-import type { MailboxSearchHit } from './imap-search';
-
-class ControlledClient {
-  usable = true;
-  outstanding = 0;
-  closeCalls = 0;
-  readonly result: ReadonlyArray<MailboxSearchHit> | undefined;
-  readonly #waiters = new Set<
-    (effect: Effect.Effect<ReadonlyArray<MailboxSearchHit>, ImapError>) => void
-  >();
-
-  constructor(result: ReadonlyArray<MailboxSearchHit> | undefined) {
-    this.result = result;
-  }
-
-  search = (): Effect.Effect<ReadonlyArray<MailboxSearchHit>, ImapError> => {
-    if (this.result !== undefined) {
-      return Effect.succeed(this.result);
-    }
-    return Effect.uninterruptible(
-      Effect.async((resume) => {
-        this.outstanding += 1;
-        this.#waiters.add(resume);
-      }),
-    );
-  };
-
-  close = (): void => {
-    this.closeCalls += 1;
-    this.usable = false;
-    for (const resume of this.#waiters) {
-      resume(Effect.fail(new ImapError({ message: 'retired stalled client' })));
-    }
-    this.#waiters.clear();
-    this.outstanding = 0;
-  };
-
-  logout = (): Promise<void> => {
-    this.close();
-    return Promise.resolve();
-  };
-}
-
-const healthyHit = mailboxHit(
-  1,
-  '<healthy@example.com>',
-  '2026-07-16T08:00:00Z',
-);
+import { searchOptions } from './account-search.fixture';
+import { withClientSearchDeadline } from './imap-client';
+import { ControlledClient, lifecycleHit } from './imap-client.fixture';
 
 describe('searchAllAccounts timeout retirement', () => {
   it('retires repeated stalled clients before returning and uses a replacement for the next operation', async () => {
-    const opened: Array<ControlledClient> = [];
+    const stalledClients: Array<ControlledClient> = [];
     let stalledOpenings = 0;
     const program = Effect.gen(function* () {
-      const pool = yield* makeClientPool<ControlledClient>();
-      const open = (account: string) =>
-        Effect.sync(() => {
+      const boundedSearch = (account: string) =>
+        Effect.suspend(() => {
+          const isStalledAccount = account === 'stalled@example.com';
           const client = new ControlledClient(
-            account === 'healthy@example.com' || stalledOpenings >= 2
-              ? [healthyHit]
+            !isStalledAccount || stalledOpenings >= 2
+              ? [lifecycleHit]
               : undefined,
           );
-          if (account === 'stalled@example.com') {
+          if (isStalledAccount) {
             stalledOpenings += 1;
+            stalledClients.push(client);
           }
-          opened.push(client);
-          return client;
+          return withClientSearchDeadline(
+            account,
+            client,
+            (candidate) => candidate.search(),
+            Effect.sync(() => client.close()),
+          );
         });
-      const boundedSearch = (account: string) =>
-        withClientSearchDeadline(
-          account,
-          pool.clientFor(account, open(account)),
-          (client) => client.search(),
-          (client) => pool.retire(account, client),
-        );
 
       const results = yield* Effect.forEach([0, 1], () =>
         Effect.gen(function* () {
@@ -93,18 +43,14 @@ describe('searchAllAccounts timeout retirement', () => {
           return yield* Fiber.join(fiber);
         }),
       );
-      const replacement = yield* pool.clientFor(
-        'stalled@example.com',
-        open('stalled@example.com'),
-      );
-      const laterHits = yield* replacement.search();
-      return { results, laterHits, replacement };
+      const laterHits = yield* boundedSearch('stalled@example.com');
+      return { results, laterHits };
     });
 
-    const { results, laterHits, replacement } = await Effect.runPromise(
+    const { results, laterHits } = await Effect.runPromise(
       program.pipe(Effect.provide(TestContext.TestContext)),
     );
-    const [, firstStalled, secondStalled] = opened;
+    const [firstStalled, secondStalled, replacement] = stalledClients;
     expect(
       results.every(
         (result) =>
@@ -118,9 +64,11 @@ describe('searchAllAccounts timeout retirement', () => {
         outstanding: 0,
         closeCalls: 1,
       });
-      expect(replacement).not.toBe(stalled);
     }
-    expect(laterHits).toEqual([healthyHit]);
+    expect(replacement).not.toBe(firstStalled);
+    expect(replacement).not.toBe(secondStalled);
+    expect(replacement?.closeCalls).toBe(1);
+    expect(laterHits).toEqual([lifecycleHit]);
   });
 });
 
@@ -128,21 +76,17 @@ describe('searchAllAccounts all-stalled lifecycle', () => {
   it('retires every stalled client when all accounts time out', async () => {
     const opened: Array<ControlledClient> = [];
     const program = Effect.gen(function* () {
-      const pool = yield* makeClientPool<ControlledClient>();
       const boundedSearch = (account: string) =>
-        withClientSearchDeadline(
-          account,
-          pool.clientFor(
+        Effect.suspend(() => {
+          const client = new ControlledClient(undefined);
+          opened.push(client);
+          return withClientSearchDeadline(
             account,
-            Effect.sync(() => {
-              const client = new ControlledClient(undefined);
-              opened.push(client);
-              return client;
-            }),
-          ),
-          (client) => client.search(),
-          (client) => pool.retire(account, client),
-        );
+            client,
+            (candidate) => candidate.search(),
+            Effect.sync(() => client.close()),
+          );
+        });
       const fiber = yield* Effect.fork(
         Effect.flip(
           searchAllAccounts(

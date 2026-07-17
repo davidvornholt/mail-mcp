@@ -1,4 +1,4 @@
-import { Duration, Effect, Ref } from 'effect';
+import { Duration, Effect, Exit, Ref } from 'effect';
 import { ImapFlow } from 'imapflow';
 import {
   AccountSearchTimeoutError,
@@ -14,6 +14,22 @@ type WarmClient = {
 };
 
 const accountSearchTimeoutSeconds = 30;
+const retiredClients = new WeakSet<object>();
+
+const beginRetirement = (client: object): boolean => {
+  if (retiredClients.has(client)) {
+    return false;
+  }
+  retiredClients.add(client);
+  return true;
+};
+
+export const retireClient = (client: WarmClient): Effect.Effect<void> =>
+  Effect.sync(() => {
+    if (beginRetirement(client)) {
+      client.close();
+    }
+  });
 
 export const makeClient = (account: Account, password: string): ImapFlow => {
   const client = new ImapFlow({
@@ -29,7 +45,9 @@ export const makeClient = (account: Account, password: string): ImapFlow => {
     // Backstop for operations outside global search and for connection phases.
     socketTimeout: 60_000,
   });
-  client.on('error', () => client.close());
+  client.on('error', () => {
+    Effect.runSync(retireClient(client));
+  });
   return client;
 };
 
@@ -43,40 +61,74 @@ export const connectClient = (
       new ImapError({
         message: `connect to ${host} failed: ${String(cause)}`,
       }),
-  });
+  }).pipe(
+    Effect.onExit((exit) =>
+      Exit.isFailure(exit) ? retireClient(client) : Effect.void,
+    ),
+  );
 
 export const closeClient = (client: WarmClient): Effect.Effect<void> =>
-  Effect.promise(() => client.logout().catch(() => undefined));
+  Effect.suspend(() =>
+    beginRetirement(client)
+      ? Effect.promise(() => client.logout().catch(() => undefined))
+      : Effect.void,
+  );
 
 export const makeClientPool = <Client extends WarmClient>() =>
   Effect.gen(function* () {
     const clients = yield* Ref.make<ReadonlyMap<string, Client>>(new Map());
+    const locks = yield* Ref.make<ReadonlyMap<string, Effect.Semaphore>>(
+      new Map(),
+    );
+    const lockRegistry = yield* Effect.makeSemaphore(1);
 
     const remember = (email: string, client: Client) =>
       Ref.update(clients, (map) => new Map(map).set(email, client));
+
+    const lockFor = (email: string) =>
+      lockRegistry.withPermits(1)(
+        Effect.gen(function* () {
+          const existing = (yield* Ref.get(locks)).get(email);
+          if (existing !== undefined) {
+            return existing;
+          }
+          const created = yield* Effect.makeSemaphore(1);
+          yield* Ref.update(locks, (map) => new Map(map).set(email, created));
+          return created;
+        }),
+      );
 
     const clientFor = <E>(
       email: string,
       open: Effect.Effect<Client, E>,
     ): Effect.Effect<Client, E> =>
-      Ref.get(clients).pipe(
-        Effect.flatMap((map) => {
-          const existing = map.get(email);
-          return existing?.usable === true
-            ? Effect.succeed(existing)
-            : open.pipe(Effect.tap((client) => remember(email, client)));
-        }),
+      lockFor(email).pipe(
+        Effect.flatMap((lock) =>
+          lock.withPermits(1)(
+            Ref.get(clients).pipe(
+              Effect.flatMap((map) => {
+                const existing = map.get(email);
+                if (existing?.usable === true) {
+                  return Effect.succeed(existing);
+                }
+                const removeExisting =
+                  existing === undefined
+                    ? Effect.void
+                    : Ref.update(clients, (current) => {
+                        const remaining = new Map(current);
+                        remaining.delete(email);
+                        return remaining;
+                      }).pipe(Effect.andThen(retireClient(existing)));
+                return removeExisting.pipe(
+                  Effect.andThen(
+                    open.pipe(Effect.tap((client) => remember(email, client))),
+                  ),
+                );
+              }),
+            ),
+          ),
+        ),
       );
-
-    const retire = (email: string, client: Client): Effect.Effect<void> =>
-      Ref.update(clients, (map) => {
-        if (map.get(email) !== client) {
-          return map;
-        }
-        const remaining = new Map(map);
-        remaining.delete(email);
-        return remaining;
-      }).pipe(Effect.andThen(Effect.sync(() => client.close())));
 
     const closeAll = Ref.get(clients).pipe(
       Effect.flatMap((map) =>
@@ -84,20 +136,27 @@ export const makeClientPool = <Client extends WarmClient>() =>
       ),
     );
 
-    return { clientFor, retire, closeAll } as const;
+    return { clientFor, closeAll } as const;
   });
 
 export const withClientSearchDeadline = <Client, Result>(
   account: string,
-  acquire: Effect.Effect<Client, MailError>,
+  client: Client,
   search: (client: Client) => Effect.Effect<Result, MailError>,
-  retire: (client: Client) => Effect.Effect<void>,
+  retire: Effect.Effect<void>,
 ): Effect.Effect<Result, MailError> =>
   Effect.gen(function* () {
-    const activeClient = yield* Ref.make<Client | undefined>(undefined);
-    const operation = acquire.pipe(
-      Effect.tap((client) => Ref.set(activeClient, client)),
-      Effect.flatMap(search),
+    const retired = yield* Ref.make(false);
+    const retireOnce = Ref.modify(retired, (alreadyRetired) => [
+      alreadyRetired,
+      true,
+    ]).pipe(
+      Effect.flatMap((alreadyRetired) =>
+        alreadyRetired ? Effect.void : retire,
+      ),
+    );
+    const operation = search(client).pipe(
+      Effect.ensuring(retireOnce),
       // The deadline may win while native IMAP promises or iterators continue.
       Effect.disconnect,
       Effect.timeoutFail({
@@ -111,12 +170,7 @@ export const withClientSearchDeadline = <Client, Result>(
     );
     return yield* operation.pipe(
       Effect.catchTag('AccountSearchTimeoutError', (error) =>
-        Ref.get(activeClient).pipe(
-          Effect.flatMap((client) =>
-            client === undefined ? Effect.void : retire(client),
-          ),
-          Effect.andThen(Effect.fail(error)),
-        ),
+        retireOnce.pipe(Effect.andThen(Effect.fail(error))),
       ),
     );
   });

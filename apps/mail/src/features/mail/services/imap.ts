@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import type { ImapFlow } from 'imapflow';
 import type { MailError } from '../errors/errors';
+import type { Account } from '../schemas/account';
 import type {
   AttachmentContent,
   DraftInput,
@@ -20,11 +21,29 @@ import {
   connectClient,
   makeClient,
   makeClientPool,
+  retireClient,
   withClientSearchDeadline,
 } from './imap-client';
 import { listFolders, readMessage } from './imap-ops';
 import { searchMailboxes } from './imap-search';
 import { Secrets } from './secrets';
+
+const searchWithDedicatedClient = (
+  account: Account,
+  password: string,
+  options: SearchOptions,
+) => {
+  const client = makeClient(account, password);
+  return withClientSearchDeadline(
+    account.email,
+    client,
+    (candidate) =>
+      connectClient(candidate, account.host).pipe(
+        Effect.andThen(searchMailboxes(candidate, options)),
+      ),
+    retireClient(client),
+  );
+};
 
 // One IMAP service instance keeps a warm, authenticated connection per account
 // so the MCP server reuses it across tool calls. Connections are closed by the
@@ -57,12 +76,11 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
       email: string,
       options: SearchOptions,
     ) =>
-      withClientSearchDeadline(
-        email,
-        clientFor(email),
-        (client) => searchMailboxes(client, options),
-        (client) => clientPool.retire(email, client),
-      );
+      Effect.gen(function* () {
+        const account = yield* config.getAccount(email);
+        const password = yield* secrets.getPassword(email);
+        return yield* searchWithDedicatedClient(account, password, options);
+      });
 
     yield* Effect.addFinalizer(() => clientPool.closeAll);
 
