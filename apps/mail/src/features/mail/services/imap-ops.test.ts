@@ -105,7 +105,7 @@ describe('readMessage reply attribution dates', () => {
     }
   });
 
-  it('unfolds the selected last raw Date before attribution', async () => {
+  it('sanitizes the selected last raw Date before attribution', async () => {
     setSystemTime(frozenTime);
     const cases = [
       {
@@ -128,6 +128,20 @@ describe('readMessage reply attribution dates', () => {
         attributionDate: 'Mon, 13 Jul 2026 10:30:00',
         attribution:
           'On July 13, 2026 at 10:30, "Original Sender" <original@example.com> wrote:',
+      },
+      {
+        dates: ['A recent Tuesday\r\r\n injected attribution line'],
+        normalized: frozenTime.toISOString(),
+        attributionDate: '',
+        attribution: '"Original Sender" <original@example.com> wrote:',
+      },
+      {
+        dates: [
+          'A recent Tuesday\rFrom: Injected Sender <injected@example.com>',
+        ],
+        normalized: frozenTime.toISOString(),
+        attributionDate: '',
+        attribution: '"Original Sender" <original@example.com> wrote:',
       },
     ] as const;
     const results = await Promise.all(

@@ -38,6 +38,8 @@ const toFolderInfo = (folder: ListResponse): FolderInfo => ({
   subscribed: folder.subscribed,
 });
 
+const headerLineBreakPattern = /[\r\n]/u;
+
 const rawHeaderValue = (parsed: ParsedMail, key: string): string => {
   const line = parsed.headerLines.findLast(
     (header) => header.key === key,
@@ -46,6 +48,9 @@ const rawHeaderValue = (parsed: ParsedMail, key: string): string => {
     return '';
   }
   const unfolded = line.replaceAll(/\r?\n[ \t]+/gu, ' ');
+  if (headerLineBreakPattern.test(unfolded)) {
+    return '';
+  }
   const separator = unfolded.indexOf(':');
   return separator === -1 ? '' : unfolded.slice(separator + 1).trim();
 };
