@@ -57,6 +57,7 @@ export type FullMessage = {
   readonly cc: string;
   readonly subject: string;
   readonly date: string;
+  readonly attributionDate: string;
   readonly messageId: string;
   readonly inReplyTo: string;
   readonly references: ReadonlyArray<string>;

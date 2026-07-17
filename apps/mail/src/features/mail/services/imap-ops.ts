@@ -38,6 +38,15 @@ const toFolderInfo = (folder: ListResponse): FolderInfo => ({
   subscribed: folder.subscribed,
 });
 
+const rawHeaderValue = (parsed: ParsedMail, key: string): string => {
+  const line = parsed.headerLines.find((header) => header.key === key)?.line;
+  if (line === undefined) {
+    return '';
+  }
+  const separator = line.indexOf(':');
+  return separator === -1 ? '' : line.slice(separator + 1).trim();
+};
+
 const toFullMessage = (
   parsed: ParsedMail,
   folder: string,
@@ -50,6 +59,7 @@ const toFullMessage = (
   cc: addressText(parsed.cc),
   subject: parsed.subject ?? '',
   date: parsed.date?.toISOString() ?? '',
+  attributionDate: rawHeaderValue(parsed, 'date'),
   messageId: parsed.messageId ?? '',
   inReplyTo: parsed.inReplyTo ?? '',
   references: toReferences(parsed.references),

@@ -26,14 +26,14 @@ const formatReplyDate = (value: string): string => {
 };
 
 const attributionFor = (message: FullMessage): string => {
-  if (message.date !== '' && message.from !== '') {
-    return `On ${formatReplyDate(message.date)}, ${message.from} wrote:`;
+  if (message.attributionDate !== '' && message.from !== '') {
+    return `On ${formatReplyDate(message.attributionDate)}, ${message.from} wrote:`;
   }
   if (message.from !== '') {
     return `${message.from} wrote:`;
   }
-  if (message.date !== '') {
-    return `On ${formatReplyDate(message.date)}, the sender wrote:`;
+  if (message.attributionDate !== '') {
+    return `On ${formatReplyDate(message.attributionDate)}, the sender wrote:`;
   }
   return 'Previous message:';
 };

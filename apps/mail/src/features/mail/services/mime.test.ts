@@ -5,9 +5,6 @@ import type { Account } from '../schemas/account';
 import type { DraftInput, FullMessage } from '../schemas/mail';
 import { buildMime } from './mime';
 
-const quotedReplyPattern =
-  /^My answer\.\n\nOn July \d{1,2}, 2026 at \d{2}:\d{2}, Original Sender <original@example\.com> wrote:\n> First line\n>\n> Second line$/u;
-
 const account: Account = {
   email: 'sender@example.com',
   name: 'Example Sender',
@@ -94,6 +91,7 @@ describe('buildMime', () => {
         cc: '',
         subject: 'Question',
         date: '2026-07-13T08:30:00.000Z',
+        attributionDate: '2026-07-13T08:30:00',
         messageId: '<current@example.com>',
         inReplyTo: '<first@example.com>',
         references: ['<first@example.com>'],
@@ -103,11 +101,11 @@ describe('buildMime', () => {
       },
     );
 
-    expect(parsed.text?.trimEnd()).toMatch(quotedReplyPattern);
-    expect(parsed.text).not.toContain('2026-07-13T08:30:00.000Z');
-    expect(parsed.html).toContain('<p>My answer.</p>');
-    expect(parsed.html).toContain(
-      '<blockquote type="cite">First line<br><br>Second line</blockquote>',
+    expect(parsed.text?.trimEnd()).toBe(
+      'My answer.\n\nOn July 13, 2026 at 08:30, Original Sender <original@example.com> wrote:\n> First line\n>\n> Second line',
+    );
+    expect(parsed.html).toBe(
+      '<p>My answer.</p>\n<p>On July 13, 2026 at 08:30, Original Sender &lt;original@example.com&gt; wrote:</p>\n<blockquote type="cite">First line<br><br>Second line</blockquote>',
     );
     expect(parsed.inReplyTo).toBe('<current@example.com>');
     expect(parsed.references).toEqual([
