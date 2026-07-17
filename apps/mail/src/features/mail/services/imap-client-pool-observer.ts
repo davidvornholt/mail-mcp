@@ -1,6 +1,6 @@
 import { Effect, PubSub, Queue, Ref } from 'effect';
 import { type ClientPoolClosedError, ImapError } from '../errors/errors';
-import { retireClient, type WarmClient } from './imap-client';
+import type { WarmClient } from './imap-client';
 import type { ClientPoolState } from './imap-client-pool-state';
 
 export type PoolContext<Client> = {
@@ -9,7 +9,12 @@ export type PoolContext<Client> = {
   readonly closedError: ClientPoolClosedError;
 };
 
-const unavailableError = new ImapError({
+export type WinnerClaim<Client> =
+  | { readonly _tag: 'current'; readonly client: Client }
+  | { readonly _tag: 'stale'; readonly client: Client | undefined }
+  | { readonly _tag: 'closed' };
+
+export const unavailableError = new ImapError({
   message: 'IMAP client became unusable before it could be returned.',
 });
 
@@ -32,25 +37,37 @@ export const currentClient = <Client extends WarmClient>(
     );
   });
 
-export const discardUnavailable = <Client extends WarmClient>(
+export const claimCurrentWinner = <Client extends WarmClient>(
   context: PoolContext<Client>,
   email: string,
-  candidate: Client,
-  error: ImapError,
-): Effect.Effect<never, ClientPoolClosedError | ImapError> =>
-  Effect.gen(function* () {
-    const closed = yield* Ref.modify(context.state, (current) => {
-      if (current.clients.get(email) !== candidate) {
-        return [current.closed, current] as const;
+): Effect.Effect<WinnerClaim<Client>> =>
+  Ref.modify(
+    context.state,
+    (current): readonly [WinnerClaim<Client>, ClientPoolState<Client>] => {
+      if (current.closed) {
+        return [{ _tag: 'closed' }, current] as const;
+      }
+      const client = current.clients.get(email);
+      if (client?.usable === true) {
+        return [{ _tag: 'current', client }, current] as const;
+      }
+      if (client === undefined) {
+        return [{ _tag: 'stale', client }, current] as const;
       }
       const clients = new Map(current.clients);
       clients.delete(email);
-      return [current.closed, { ...current, clients }] as const;
-    });
-    yield* PubSub.publish(context.changes, undefined);
-    yield* retireClient(candidate);
-    return yield* Effect.fail(closed ? context.closedError : error);
-  });
+      return [
+        { _tag: 'stale', client },
+        { ...current, clients },
+      ];
+    },
+  ).pipe(
+    Effect.tap((claim) =>
+      claim._tag === 'stale'
+        ? PubSub.publish(context.changes, undefined)
+        : Effect.void,
+    ),
+  );
 
 export const awaitCurrentWinner = <Client extends WarmClient>(
   context: PoolContext<Client>,

@@ -1,55 +1,30 @@
-import { Effect, PubSub, Ref } from 'effect';
+import { Effect, Exit, Fiber, Ref } from 'effect';
 import type { ClientPoolClosedError, ImapError } from '../errors/errors';
 import { retireClient, type WarmClient } from './imap-client';
 import {
+  finishActivation,
+  retireStale,
+  selectWinnerOr,
+} from './imap-client-pool-admission';
+import {
   awaitCurrentWinner,
-  currentClient,
-  discardUnavailable,
+  claimCurrentWinner,
   type PoolContext,
 } from './imap-client-pool-observer';
-import {
-  type Admission,
-  admitCandidate,
-  registerCandidate,
-  removeOpening,
-} from './imap-client-pool-state';
+import { registerCandidate, removeOpening } from './imap-client-pool-state';
 
 export type ClientCandidate<Client, Error> = {
   readonly client: Client;
   readonly activate: Effect.Effect<void, Error>;
 };
 
-const retirementFor = <Client extends WarmClient>(
-  admission: Admission<Client>,
-  candidate: Client,
-): Effect.Effect<void> => {
-  if (admission._tag === 'admit' && admission.replaced !== undefined) {
-    return retireClient(admission.replaced);
-  }
-  if (admission._tag === 'reuse' || admission._tag === 'unusable') {
-    return retireClient(candidate);
-  }
-  return Effect.void;
-};
-
-const finishAdmission = <Client extends WarmClient>(
+const cleanupCandidate = <Client extends WarmClient>(
   context: PoolContext<Client>,
-  email: string,
-  admission: Admission<Client>,
   candidate: Client,
-): Effect.Effect<Client, ClientPoolClosedError | ImapError> => {
-  if (admission._tag === 'closed') {
-    return retireClient(candidate).pipe(
-      Effect.andThen(Effect.fail(context.closedError)),
-    );
-  }
-  return retirementFor(admission, candidate).pipe(
-    Effect.andThen(currentClient(context, email)),
-    Effect.catchTag('ImapError', (error) =>
-      discardUnavailable(context, email, candidate, error),
-    ),
-  );
-};
+): Effect.Effect<void> =>
+  Ref.update(context.state, (current) =>
+    removeOpening(current, candidate),
+  ).pipe(Effect.andThen(retireClient(candidate)));
 
 const settleFailure = <Client extends WarmClient, Error>(
   context: PoolContext<Client>,
@@ -58,42 +33,87 @@ const settleFailure = <Client extends WarmClient, Error>(
   error: Error,
 ): Effect.Effect<Client, Error | ClientPoolClosedError | ImapError> =>
   Effect.gen(function* () {
-    const outcome = yield* Ref.modify(context.state, (current) => {
-      let result: 'closed' | 'winner' | 'original' = 'original';
-      if (current.closed) {
-        result = 'closed';
-      } else if (current.clients.get(email)?.usable === true) {
-        result = 'winner';
-      }
-      return [result, removeOpening(current, candidate)] as const;
-    });
-    yield* retireClient(candidate);
-    if (outcome === 'closed') {
+    yield* cleanupCandidate(context, candidate);
+    const claim = yield* claimCurrentWinner(context, email);
+    if (claim._tag === 'closed') {
       return yield* Effect.fail(context.closedError);
     }
-    if (outcome === 'winner') {
-      return yield* currentClient(context, email);
+    if (claim._tag === 'current') {
+      return claim.client;
     }
+    yield* retireStale(claim);
     return yield* Effect.fail(error);
   });
 
-const finishActivation = <Client extends WarmClient>(
+const completeActivation = <Client extends WarmClient, Error>(
+  exit: Exit.Exit<void, Error>,
   context: PoolContext<Client>,
   email: string,
   candidate: Client,
-): Effect.Effect<Client, ClientPoolClosedError | ImapError> =>
-  Ref.modify(context.state, (current) =>
-    admitCandidate(current, email, candidate),
-  ).pipe(
-    Effect.tap((admission) =>
-      admission._tag === 'admit'
-        ? PubSub.publish(context.changes, undefined)
-        : Effect.void,
-    ),
-    Effect.flatMap((admission) =>
-      finishAdmission(context, email, admission, candidate),
-    ),
-  );
+): Effect.Effect<Client, Error | ClientPoolClosedError | ImapError> =>
+  Exit.matchEffect(exit, {
+    onFailure: (cause) =>
+      Effect.failCause(cause).pipe(
+        Effect.catchAll((error) =>
+          settleFailure(context, email, candidate, error),
+        ),
+      ),
+    onSuccess: () => finishActivation(context, email, candidate),
+  });
+
+const finishObservedWinner = <Client extends WarmClient, Error>(
+  context: PoolContext<Client>,
+  email: string,
+  candidate: Client,
+  activationFiber: Fiber.Fiber<void, Error>,
+): Effect.Effect<Client, Error | ClientPoolClosedError | ImapError> =>
+  Effect.gen(function* () {
+    const claim = yield* claimCurrentWinner(context, email);
+    if (claim._tag === 'closed') {
+      yield* Fiber.interrupt(activationFiber);
+      yield* cleanupCandidate(context, candidate);
+      return yield* Effect.fail(context.closedError);
+    }
+    if (claim._tag === 'current') {
+      yield* Fiber.interrupt(activationFiber);
+      yield* cleanupCandidate(context, candidate);
+      return claim.client;
+    }
+    yield* retireStale(claim);
+    const exit = yield* Fiber.await(activationFiber);
+    return yield* completeActivation(exit, context, email, candidate);
+  });
+
+const raceActivationWithWinner = <Client extends WarmClient, Error>(
+  context: PoolContext<Client>,
+  email: string,
+  race: {
+    readonly candidate: Client;
+    readonly activation: Effect.Effect<void, Error>;
+    readonly peerWinner: Effect.Effect<
+      { readonly _tag: 'winner'; readonly client: Client },
+      ClientPoolClosedError
+    >;
+  },
+): Effect.Effect<Client, Error | ClientPoolClosedError | ImapError> =>
+  Effect.raceWith(race.activation, race.peerWinner, {
+    onSelfDone: (exit, observerFiber) =>
+      Fiber.interrupt(observerFiber).pipe(
+        Effect.andThen(
+          completeActivation(exit, context, email, race.candidate),
+        ),
+      ),
+    onOtherDone: (exit, activationFiber) =>
+      Exit.matchEffect(exit, {
+        onFailure: (cause) =>
+          Fiber.interrupt(activationFiber).pipe(
+            Effect.andThen(cleanupCandidate(context, race.candidate)),
+            Effect.andThen(Effect.failCause(cause)),
+          ),
+        onSuccess: () =>
+          finishObservedWinner(context, email, race.candidate, activationFiber),
+      }),
+  });
 
 export const activateAndAdmit = <Client extends WarmClient, Error>(
   context: PoolContext<Client>,
@@ -111,36 +131,19 @@ export const activateAndAdmit = <Client extends WarmClient, Error>(
         );
       }
       if (registration._tag === 'reuse') {
-        return retireClient(candidate.client).pipe(
-          Effect.andThen(currentClient(context, email)),
+        return selectWinnerOr(
+          context,
+          email,
+          candidate.client,
+          activateAndAdmit(context, email, candidate, restore),
         );
       }
-      const activation = restore(
-        candidate.activate.pipe(
-          Effect.disconnect,
-          Effect.as({ _tag: 'activated' } as const),
-        ),
-      );
-      const peerWinner = restore(awaitCurrentWinner(context, email));
-      return Effect.raceFirst(activation, peerWinner).pipe(
-        Effect.matchEffect({
-          onFailure: (error) =>
-            settleFailure(context, email, candidate.client, error),
-          onSuccess: (result) =>
-            result._tag === 'activated'
-              ? finishActivation(context, email, candidate.client)
-              : Ref.update(context.state, (current) =>
-                  removeOpening(current, candidate.client),
-                ).pipe(
-                  Effect.andThen(retireClient(candidate.client)),
-                  Effect.andThen(currentClient(context, email)),
-                ),
-        }),
-        Effect.onInterrupt(() =>
-          Ref.update(context.state, (current) =>
-            removeOpening(current, candidate.client),
-          ).pipe(Effect.andThen(retireClient(candidate.client))),
-        ),
+      return raceActivationWithWinner(context, email, {
+        candidate: candidate.client,
+        activation: restore(candidate.activate.pipe(Effect.disconnect)),
+        peerWinner: restore(awaitCurrentWinner(context, email)),
+      }).pipe(
+        Effect.onInterrupt(() => cleanupCandidate(context, candidate.client)),
       );
     }),
   );

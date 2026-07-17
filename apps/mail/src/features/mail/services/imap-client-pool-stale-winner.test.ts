@@ -2,42 +2,13 @@ import { describe, expect, it } from 'bun:test';
 import { Deferred, Effect, Exit, Fiber } from 'effect';
 import { ControlledClient, lifecycleHit } from './imap-client.fixture';
 import { makeClientPool } from './imap-client-pool';
-import type { MailboxSearchHit } from './imap-search';
+import {
+  TransitionClient,
+  transitionCandidate,
+} from './imap-client-pool.fixture';
 
 const account = 'me@example.com';
 const peerConsumptionRead = 3;
-const ignoreUsableRead = (_read: number): void => undefined;
-
-class TransitionClient {
-  readonly result: ReadonlyArray<MailboxSearchHit> = [lifecycleHit];
-  closeCalls = 0;
-  usableReads = 0;
-  onUsableRead = ignoreUsableRead;
-  #usable = true;
-
-  get usable(): boolean {
-    this.usableReads += 1;
-    this.onUsableRead(this.usableReads);
-    return this.#usable;
-  }
-
-  set usable(value: boolean) {
-    this.#usable = value;
-  }
-
-  close = (): void => {
-    this.closeCalls += 1;
-    this.#usable = false;
-  };
-
-  logout = (): Promise<void> => {
-    this.close();
-    return Promise.resolve();
-  };
-}
-
-const candidate = (client: TransitionClient, activate: Effect.Effect<void>) =>
-  Effect.succeed({ client, activate });
 
 describe('makeClientPool winner validity', () => {
   it('rejects a candidate that becomes unusable before admission', async () => {
@@ -81,7 +52,7 @@ describe('makeClientPool winner validity', () => {
       const healthyFiber = yield* Effect.fork(
         pool.clientFor(
           account,
-          candidate(
+          transitionCandidate(
             healthy,
             Deferred.succeed(healthyStarted, undefined).pipe(
               Effect.andThen(Deferred.await(releaseHealthy)),
@@ -93,7 +64,7 @@ describe('makeClientPool winner validity', () => {
         Effect.exit(
           pool.clientFor(
             account,
-            candidate(
+            transitionCandidate(
               stale,
               Deferred.succeed(staleStarted, undefined).pipe(
                 Effect.andThen(Deferred.await(releaseStale)),
@@ -140,7 +111,7 @@ describe('makeClientPool terminal winner validity', () => {
         Effect.exit(
           pool.clientFor(
             account,
-            candidate(
+            transitionCandidate(
               winner,
               Deferred.succeed(winnerStarted, undefined).pipe(
                 Effect.andThen(Deferred.await(releaseWinner)),
@@ -153,7 +124,7 @@ describe('makeClientPool terminal winner validity', () => {
         Effect.exit(
           pool.clientFor(
             account,
-            candidate(
+            transitionCandidate(
               peer,
               Deferred.succeed(peerStarted, undefined).pipe(
                 Effect.andThen(Effect.never),
