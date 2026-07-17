@@ -5,35 +5,12 @@ import {
   type MailError,
   MissingPasswordError,
 } from '../errors/errors';
-import type { SearchOptions } from '../schemas/mail';
 import { searchAllAccounts, searchOneAccount } from './account-search';
+import { mailboxHit, searchOptions } from './account-search.fixture';
 import type { MailboxSearchHit } from './imap-search';
 
-const options: SearchOptions = {
-  scope: 'all',
-  query: 'invoice',
-  limit: 2,
-};
 const duplicateNewerUid = 3;
 const newestUid = 4;
-
-const hit = (
-  uid: number,
-  messageId: string,
-  receivedAt: string,
-): MailboxSearchHit => ({
-  hit: {
-    uid,
-    folder: 'INBOX',
-    from: 'sender@example.com',
-    to: 'me@example.com',
-    subject: messageId,
-    date: receivedAt,
-  },
-  mailboxDeduplicationId: messageId,
-  messageId,
-  receivedAt,
-});
 
 describe('searchAllAccounts', () => {
   it('merges, deduplicates, sorts, limits, and reports account failures', async () => {
@@ -44,22 +21,30 @@ describe('searchAllAccounts', () => {
         case 'first@example.com':
           return Effect.succeed([
             {
-              ...hit(1, '<duplicate@example.com>', '2026-07-14T08:00:00Z'),
+              ...mailboxHit(
+                1,
+                '<duplicate@example.com>',
+                '2026-07-14T08:00:00Z',
+              ),
               mailboxDeduplicationId: 'server-one-id',
             },
-            hit(2, '<older@example.com>', '2026-07-13T08:00:00Z'),
+            mailboxHit(2, '<older@example.com>', '2026-07-13T08:00:00Z'),
           ]);
         case 'second@example.com':
           return Effect.succeed([
             {
-              ...hit(
+              ...mailboxHit(
                 duplicateNewerUid,
                 '<duplicate@example.com>',
                 '2026-07-15T08:00:00Z',
               ),
               mailboxDeduplicationId: 'server-two-id',
             },
-            hit(newestUid, '<newest@example.com>', '2026-07-16T08:00:00Z'),
+            mailboxHit(
+              newestUid,
+              '<newest@example.com>',
+              '2026-07-16T08:00:00Z',
+            ),
           ]);
         default:
           return Effect.fail(
@@ -74,7 +59,7 @@ describe('searchAllAccounts', () => {
     const result = await Effect.runPromise(
       searchAllAccounts(
         ['first@example.com', 'second@example.com', 'unavailable@example.com'],
-        options,
+        searchOptions,
         searchMailbox,
       ),
     );
@@ -104,12 +89,12 @@ describe('searchAllAccounts', () => {
     const result = await Effect.runPromise(
       searchAllAccounts(
         ['first@example.com', 'second@example.com'],
-        { ...options, limit: 20 },
+        { ...searchOptions, limit: 20 },
         (account) =>
           Effect.succeed([
             account === 'first@example.com'
-              ? hit(1, '<ABC@example.com>', '2026-07-15T08:00:00Z')
-              : hit(2, '<abc@example.com>', '2026-07-16T08:00:00Z'),
+              ? mailboxHit(1, '<ABC@example.com>', '2026-07-15T08:00:00Z')
+              : mailboxHit(2, '<abc@example.com>', '2026-07-16T08:00:00Z'),
           ]),
       ),
     );
@@ -125,7 +110,7 @@ describe('searchAllAccounts', () => {
       Effect.flip(
         searchAllAccounts(
           ['first@example.com', 'second@example.com'],
-          options,
+          searchOptions,
           (account) =>
             Effect.fail(
               new MissingPasswordError({
@@ -150,9 +135,9 @@ describe('searchAllAccounts', () => {
 describe('searchOneAccount', () => {
   it('adds the account handle and preserves explicit-account failures', async () => {
     const successful = await Effect.runPromise(
-      searchOneAccount('me@example.com', options, () =>
+      searchOneAccount('me@example.com', searchOptions, () =>
         Effect.succeed([
-          hit(1, '<message@example.com>', '2026-07-16T08:00:00Z'),
+          mailboxHit(1, '<message@example.com>', '2026-07-16T08:00:00Z'),
         ]),
       ),
     );
@@ -164,7 +149,7 @@ describe('searchOneAccount', () => {
 
     const failed = await Effect.runPromise(
       Effect.flip(
-        searchOneAccount('me@example.com', options, () =>
+        searchOneAccount('me@example.com', searchOptions, () =>
           Effect.fail(new ImapError({ message: 'authentication failed' })),
         ),
       ),

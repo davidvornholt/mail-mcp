@@ -35,6 +35,9 @@ const makeClient = (account: Account, password: string): ImapFlow =>
     logger: false,
     connectionTimeout: 15_000,
     greetingTimeout: 15_000,
+    // Backstop for silent sockets. Must exceed the per-account search deadline
+    // in account-search.ts so the structured timeout failure fires first.
+    socketTimeout: 60_000,
   });
 
 const connect = (
