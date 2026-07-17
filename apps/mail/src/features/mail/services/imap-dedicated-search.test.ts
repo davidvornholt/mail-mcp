@@ -18,6 +18,7 @@ describe('searchWithDedicatedClient', () => {
               created.push(client);
               return client;
             },
+            () => Effect.void,
             (client) => client.search(),
           ),
         ),
@@ -53,5 +54,46 @@ describe('searchWithDedicatedClient', () => {
       usable: true,
     });
     expect(result.warmResult).toEqual([lifecycleHit]);
+  });
+
+  it('bounds activation before mailbox search starts', async () => {
+    const client = new ControlledClient(undefined);
+    let searchCalls = 0;
+    const program = Effect.gen(function* () {
+      const fiber = yield* Effect.fork(
+        Effect.flip(
+          searchWithDedicatedClient(
+            'stalled@example.com',
+            () => client,
+            (candidate) => candidate.search().pipe(Effect.asVoid),
+            () => {
+              searchCalls += 1;
+              return Effect.succeed([lifecycleHit]);
+            },
+          ),
+        ),
+      );
+      yield* TestClock.adjust('29999 millis');
+      const beforeDeadline = {
+        closeCalls: client.closeCalls,
+        outstanding: client.outstanding,
+      };
+      yield* TestClock.adjust('1 millis');
+      const error = yield* Fiber.join(fiber);
+      return { beforeDeadline, error };
+    });
+
+    const result = await Effect.runPromise(
+      program.pipe(Effect.provide(TestContext.TestContext)),
+    );
+    expect(result.beforeDeadline).toEqual({
+      closeCalls: 0,
+      outstanding: 1,
+    });
+    expect(result.error).toMatchObject({
+      _tag: 'AccountSearchTimeoutError',
+    });
+    expect(searchCalls).toBe(0);
+    expect(client.closeCalls).toBe(1);
   });
 });

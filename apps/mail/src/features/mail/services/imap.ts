@@ -31,13 +31,17 @@ import { Secrets } from './secrets';
 export const searchWithDedicatedClient = <Client extends WarmClient, Result>(
   account: string,
   createClient: () => Client,
+  activate: (client: Client) => Effect.Effect<void, MailError>,
   search: (client: Client) => Effect.Effect<Result, MailError>,
 ) => {
   const client = createClient();
   return withClientSearchDeadline(
     account,
     client,
-    search,
+    (candidate) =>
+      activate(candidate).pipe(
+        Effect.andThen(Effect.suspend(() => search(candidate))),
+      ),
     retireClient(client),
   );
 };
@@ -77,10 +81,8 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
         return yield* searchWithDedicatedClient(
           email,
           () => makeClient(account, password),
-          (candidate) =>
-            connectClient(candidate, account.host).pipe(
-              Effect.andThen(searchMailboxes(candidate, options)),
-            ),
+          (candidate) => connectClient(candidate, account.host),
+          (candidate) => searchMailboxes(candidate, options),
         );
       });
     yield* Effect.addFinalizer(() => clientPool.closeAll);

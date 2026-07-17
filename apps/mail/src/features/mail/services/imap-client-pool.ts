@@ -1,70 +1,24 @@
-import { Effect, Exit, Ref } from 'effect';
+import { Deferred, Effect, Ref } from 'effect';
 import { ClientPoolClosedError } from '../errors/errors';
-import { closeClient, retireClient, type WarmClient } from './imap-client';
+import { retireClient, type WarmClient } from './imap-client';
+import {
+  type Admission,
+  admitCandidate,
+  type ClientPoolState,
+  closePool,
+  initialClientPoolState,
+  registerCandidate,
+  removeOpening,
+} from './imap-client-pool-state';
 
 type ClientCandidate<Client, Error> = {
   readonly client: Client;
   readonly activate: Effect.Effect<void, Error>;
 };
 
-type ClientPoolState<Client> = {
-  readonly clients: ReadonlyMap<string, Client>;
-  readonly opening: ReadonlySet<Client>;
-  readonly closed: boolean;
-};
-type ClientPoolSnapshot<Client> = {
-  readonly clients: ReadonlyArray<Client>;
-  readonly opening: ReadonlyArray<Client>;
-};
-type Admission<Client> =
-  | { readonly _tag: 'admit'; readonly replaced: Client | undefined }
-  | { readonly _tag: 'reuse'; readonly client: Client }
-  | { readonly _tag: 'closed' };
 type PoolContext<Client> = {
   readonly state: Ref.Ref<ClientPoolState<Client>>;
   readonly closedError: ClientPoolClosedError;
-};
-const registerCandidate = <Client>(
-  state: ClientPoolState<Client>,
-  client: Client,
-): readonly [boolean, ClientPoolState<Client>] =>
-  state.closed
-    ? [false, state]
-    : [
-        true,
-        {
-          ...state,
-          opening: new Set(state.opening).add(client),
-        },
-      ];
-const removeOpening = <Client>(
-  state: ClientPoolState<Client>,
-  client: Client,
-): ClientPoolState<Client> => {
-  const opening = new Set(state.opening);
-  opening.delete(client);
-  return { ...state, opening };
-};
-
-const admitCandidate = <Client extends WarmClient>(
-  state: ClientPoolState<Client>,
-  email: string,
-  candidate: Client,
-): readonly [Admission<Client>, ClientPoolState<Client>] => {
-  const withoutOpening = removeOpening(state, candidate);
-  if (state.closed) {
-    return [{ _tag: 'closed' }, withoutOpening];
-  }
-  const existing = state.clients.get(email);
-  if (existing?.usable === true) {
-    return [{ _tag: 'reuse', client: existing }, withoutOpening];
-  }
-  const clients = new Map(state.clients);
-  clients.set(email, candidate);
-  return [
-    { _tag: 'admit', replaced: existing },
-    { ...withoutOpening, clients },
-  ];
 };
 
 const finishAdmission = <Client extends WarmClient>(
@@ -83,55 +37,116 @@ const finishAdmission = <Client extends WarmClient>(
   return retireClient(candidate).pipe(Effect.andThen(Effect.fail(closedError)));
 };
 
+const settleFailure = <Client extends WarmClient, Error>(
+  context: PoolContext<Client>,
+  email: string,
+  candidate: Client,
+  error: Error,
+): Effect.Effect<Client, Error> =>
+  Ref.modify(context.state, (current) => {
+    const existing = current.clients.get(email);
+    return [
+      existing?.usable === true ? existing : undefined,
+      removeOpening(current, candidate),
+    ];
+  }).pipe(
+    Effect.flatMap((winner) =>
+      retireClient(candidate).pipe(
+        Effect.andThen(
+          winner === undefined ? Effect.fail(error) : Effect.succeed(winner),
+        ),
+      ),
+    ),
+  );
+
+const finishActivation = <Client extends WarmClient>(
+  context: PoolContext<Client>,
+  email: string,
+  candidate: Client,
+  winner: Deferred.Deferred<Client>,
+): Effect.Effect<Client, ClientPoolClosedError> =>
+  Ref.modify(context.state, (current) =>
+    admitCandidate(current, email, candidate),
+  ).pipe(
+    Effect.tap((admission) =>
+      admission._tag === 'admit'
+        ? Deferred.succeed(winner, candidate)
+        : Effect.void,
+    ),
+    Effect.flatMap((admission) =>
+      finishAdmission(admission, candidate, context.closedError),
+    ),
+  );
+
 const activateAndAdmit = <Client extends WarmClient, Error>(
   context: PoolContext<Client>,
   email: string,
   candidate: ClientCandidate<Client, Error>,
-  activate: Effect.Effect<void, Error>,
-): Effect.Effect<Client, Error | ClientPoolClosedError> => {
-  const remove = Ref.update(context.state, (current) =>
-    removeOpening(current, candidate.client),
-  );
-  return Ref.modify(context.state, (current) =>
-    registerCandidate(current, candidate.client),
-  ).pipe(
-    Effect.flatMap((registered) => {
-      if (!registered) {
+  restore: <A, E, R>(effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>,
+): Effect.Effect<Client, Error | ClientPoolClosedError> =>
+  Deferred.make<Client>().pipe(
+    Effect.flatMap((createdWinner) =>
+      Ref.modify(context.state, (current) =>
+        registerCandidate(current, email, candidate.client, createdWinner),
+      ),
+    ),
+    Effect.flatMap((registration) => {
+      if (registration._tag === 'closed') {
         return retireClient(candidate.client).pipe(
           Effect.andThen(Effect.fail(context.closedError)),
         );
       }
-      return activate.pipe(
-        Effect.onExit((exit) =>
-          Exit.isFailure(exit)
-            ? remove.pipe(Effect.andThen(retireClient(candidate.client)))
-            : Effect.void,
+      if (registration._tag === 'reuse') {
+        return retireClient(candidate.client).pipe(
+          Effect.as(registration.client),
+        );
+      }
+      const activation = restore(
+        candidate.activate.pipe(
+          Effect.disconnect,
+          Effect.as({ _tag: 'activated' } as const),
         ),
-        Effect.andThen(
-          Ref.modify(context.state, (current) =>
-            admitCandidate(current, email, candidate.client),
-          ),
+      );
+      const peerWinner = restore(
+        Deferred.await(registration.winner).pipe(
+          Effect.map((client) => ({ _tag: 'winner', client }) as const),
         ),
-        Effect.flatMap((admission) =>
-          finishAdmission(admission, candidate.client, context.closedError),
+      );
+      return Effect.raceFirst(activation, peerWinner).pipe(
+        Effect.matchEffect({
+          onFailure: (error) =>
+            settleFailure(context, email, candidate.client, error),
+          onSuccess: (result) =>
+            result._tag === 'activated'
+              ? finishActivation(
+                  context,
+                  email,
+                  candidate.client,
+                  registration.winner,
+                )
+              : Ref.update(context.state, (current) =>
+                  removeOpening(current, candidate.client),
+                ).pipe(
+                  Effect.andThen(retireClient(candidate.client)),
+                  Effect.as(result.client),
+                ),
+        }),
+        Effect.onInterrupt(() =>
+          Ref.update(context.state, (current) =>
+            removeOpening(current, candidate.client),
+          ).pipe(Effect.andThen(retireClient(candidate.client))),
         ),
       );
     }),
   );
-};
 
 export const makeClientPool = <Client extends WarmClient>() =>
   Effect.gen(function* () {
-    const state = yield* Ref.make<ClientPoolState<Client>>({
-      clients: new Map(),
-      opening: new Set(),
-      closed: false,
-    });
+    const state = yield* Ref.make(initialClientPoolState<Client>());
     const closedError = new ClientPoolClosedError({
       message: 'IMAP client pool is closed.',
     });
     const context = { state, closedError };
-
     const clientFor = <OpenError, ActivationError>(
       email: string,
       makeCandidate: Effect.Effect<
@@ -154,47 +169,19 @@ export const makeClientPool = <Client extends WarmClient>() =>
           return Effect.uninterruptibleMask((restore) =>
             restore(makeCandidate).pipe(
               Effect.flatMap((candidate) =>
-                activateAndAdmit(
-                  context,
-                  email,
-                  candidate,
-                  restore(candidate.activate.pipe(Effect.disconnect)),
-                ),
+                activateAndAdmit(context, email, candidate, restore),
               ),
             ),
           );
         }),
       );
-
-    const closeAll = Ref.modify(
-      state,
-      (current): [ClientPoolSnapshot<Client>, ClientPoolState<Client>] => {
-        if (current.closed) {
-          return [{ clients: [], opening: [] }, current];
-        }
-        return [
-          {
-            clients: [...current.clients.values()],
-            opening: [...current.opening],
-          },
-          {
-            clients: new Map<string, Client>(),
-            opening: new Set<Client>(),
-            closed: true,
-          },
-        ];
-      },
-    ).pipe(
+    const closeAll = Ref.modify(state, closePool).pipe(
       Effect.flatMap(({ clients, opening }) =>
-        Effect.all(
-          [
-            Effect.forEach(clients, closeClient, { discard: true }),
-            Effect.forEach(opening, retireClient, { discard: true }),
-          ],
-          { discard: true },
-        ),
+        Effect.forEach([...clients, ...opening], retireClient, {
+          concurrency: 'unbounded',
+          discard: true,
+        }),
       ),
     );
-
     return { clientFor, closeAll } as const;
   });

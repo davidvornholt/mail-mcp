@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'bun:test';
-import { Deferred, Effect, Fiber } from 'effect';
+import { Deferred, Effect, Fiber, Option } from 'effect';
 import { ControlledClient, lifecycleHit } from './imap-client.fixture';
 import { makeClientPool } from './imap-client-pool';
 
 const account = 'me@example.com';
+
+class StalledLogoutClient extends ControlledClient {
+  logoutStarted = false;
+
+  override logout = (): Promise<void> => {
+    this.logoutStarted = true;
+    return new Promise(() => undefined);
+  };
+}
 
 const stalledCandidate = (
   client: ControlledClient,
@@ -81,5 +90,43 @@ describe('makeClientPool terminal shutdown', () => {
     expect(replacementExit._tag).toBe('Failure');
     expect(initial.closeCalls).toBe(1);
     expect(replacement.closeCalls).toBe(1);
+  });
+
+  it('retires every snapshot without waiting for a stalled logout', async () => {
+    const first = new StalledLogoutClient([lifecycleHit]);
+    const second = new ControlledClient([lifecycleHit]);
+    const opening = new ControlledClient(undefined);
+    const program = Effect.gen(function* () {
+      const pool = yield* makeClientPool<ControlledClient>();
+      yield* pool.clientFor(
+        'first@example.com',
+        Effect.succeed({ client: first, activate: Effect.void }),
+      );
+      yield* pool.clientFor(
+        'second@example.com',
+        Effect.succeed({ client: second, activate: Effect.void }),
+      );
+      const started = yield* Deferred.make<void>();
+      const openingFiber = yield* Effect.fork(
+        pool.clientFor('third@example.com', stalledCandidate(opening, started)),
+      );
+      yield* Deferred.await(started);
+      const closeFiber = yield* Effect.fork(pool.closeAll);
+      const closeResult = yield* Fiber.join(closeFiber).pipe(
+        Effect.timeoutOption('50 millis'),
+      );
+      const closeCalls = [
+        first.closeCalls,
+        second.closeCalls,
+        opening.closeCalls,
+      ];
+      yield* Fiber.interrupt(closeFiber);
+      yield* Fiber.interrupt(openingFiber);
+      return { closeCalls, closeResult };
+    });
+
+    const result = await Effect.runPromise(program);
+    expect(result.closeCalls).toEqual([1, 1, 1]);
+    expect(Option.isSome(result.closeResult)).toBe(true);
   });
 });
