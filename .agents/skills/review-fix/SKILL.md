@@ -57,16 +57,18 @@ Every finding gets exactly one disposition, judged against the scope contract:
 - **fix-now**: material under the threat model AND inside the intent. The bar: a maintainer would block the merge over it.
 - **defer**: real but outside the intent or below materiality. File a self-contained GitHub issue — evidence, concrete failure scenario, suggested verification, link to the PR. Deferral is the default for real-but-adjacent findings; "reproducible" is not "material".
 - **discard**: refuted, speculative, or conflicting with a registry decision. Append discards with durable value (deliberate policy or architecture choices, accepted risks) to `.agents/review/decisions.md`; summarize the rest in the review body.
-- **needs-clarification**: pause and ask the user, with a decision brief per question: what the diff currently does, each option's concrete consequences (who breaks, what it costs), and a recommendation with reasoning. Apply the `needs-clarification` label (create it if missing) while paused.
+- **needs-clarification**: pause and ask the user, with a decision brief per question: what the diff currently does, each option's concrete consequences (who breaks, what it costs), and a recommendation with reasoning.
 
-Every pause for user input — needs-clarification and tripwires alike — is also posted as a PR comment carrying the decision brief. The PR is the durable state: the user answers asynchronously from anywhere, and any session resumes the cycle from the answer. Self-authored activity triggers no GitHub notifications: when posting with the user's own account, also ping through an out-of-band channel if one is available (e.g. a push-notification tool); with a bot-account token, an @mention of the user is the ping. Pauses are the only events that ping — routine threads, commits, and the report stay silent.
+Every pause for user input — needs-clarification and tripwires alike — is posted as a PR comment carrying the decision brief, and applies the `needs-clarification` label (create it if missing). The PR is the durable state: the user answers asynchronously from anywhere, and any session resumes the cycle from the answer. The label is also the doorbell: self-authored activity triggers no GitHub notifications, so the canonical `Notify pause` workflow pushes a phone notification on the label event. After labeling, confirm that run succeeded (`gh run list --workflow "Notify pause"`); if it failed or never fired, state that in the pause comment. While a live session waits for the answer, watch the thread with a harness monitor facility if one exists, otherwise poll `gh` with generous backoff; on timeout, stop cleanly — the labeled draft PR is the durable pause, and a later session resumes from the reply. Pauses are the only events that ping.
 
 Disposition a finding that is one instance of a repeated pattern as its class: the thread names the pattern and enumerates every sibling site, so the fix and the verification pass cover the class. The verification pass is delta-scoped and cannot see sibling defects the fix left untouched in the base diff — class-wide threads are what close that gap.
 
 Escalation tripwires — each converts a fix-now into a user question, and a blanket pre-approval ("I approve all further decisions") does not lift them:
 
-- the fix would add a new subsystem or dependency;
+- the fix would introduce production machinery with invariants of its own — machinery that would deserve a review lens the scope contract never included. A new dependency always qualifies; so does a subsystem or mechanism of any kind (a pool, a state machine, a retry layer, a background fiber — the examples are illustrative, the lens test is the trigger);
 - the fix hardens beyond the stated threat model.
+
+New tests are never a tripwire, and neither is mechanically splitting a file the fix pushed over the line limit — corrections to code already under review need no new lens, however large. Tripwires bind fixes as well as dispositions: a worker whose fix would cross one stops, replies in-thread naming the boundary, and leaves the thread unresolved for the orchestrator to escalate.
 
 ## Fix
 
@@ -82,7 +84,7 @@ Re-run the deterministic gate after the fix round.
 
 One fresh `review-pass` fan-out scoped to the fixes: set `baseRef` to the pre-fix head SHA so the reviewed diff is exactly the fix commits, with lenses answering two questions — does each fix resolve its thread's finding, and did the fixes introduce regressions. Verifiers attack the class, not the instance: reconstruct each failure mode with real inputs through the real pipeline, and actively construct sibling inputs that still exhibit the class the fix claims to close.
 
-A fix that failed to resolve its thread's finding, or that introduced a regression, gets one repair round (worker, gate, evidence, thread reply). If a repair round ran, one further `review-pass` scoped to the repair delta only (baseRef = the pre-repair head) checks the repairs the same way; anything material it finds gets one final repair, verified mechanically only. Everything else verification surfaces is dispositioned defer or discard — verification findings never start a full review pass. Then stop, unconditionally. The final repair alone remains unverified by fresh eyes; name that in the report.
+A fix that failed to resolve its thread's finding, or that introduced a regression, gets one repair round (worker, gate, evidence, thread reply). "Introduced" is a mechanical test, not a judgment call: a defect reproducible on the pass's base SHA predates the fixes and is deferred, however real — only defects the reviewed commits created qualify for repair. If a repair round ran, one further `review-pass` scoped to the repair delta only (baseRef = the pre-repair head) checks the repairs the same way; anything material it finds gets one final repair, verified mechanically only. Everything else verification surfaces is dispositioned defer or discard — verification findings never start a full review pass. Then stop, unconditionally. The final repair alone remains unverified by fresh eyes; name that in the report.
 
 ## Report
 
