@@ -1,5 +1,4 @@
 import { Effect } from 'effect';
-import type { ImapFlow } from 'imapflow';
 import type { MailError } from '../errors/errors';
 import type {
   AttachmentContent,
@@ -23,9 +22,9 @@ import {
   type WarmClient,
   withClientSearchDeadline,
 } from './imap-client';
-import { makeClientPool } from './imap-client-pool';
 import { listFolders, readMessage } from './imap-ops';
 import { searchMailboxes } from './imap-search';
+import { makeWarmClientCache } from './imap-warm-cache';
 import { Secrets } from './secrets';
 
 export const searchWithDedicatedClient = <Client extends WarmClient, Result>(
@@ -54,19 +53,16 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
   scoped: Effect.gen(function* () {
     const config = yield* MailConfig;
     const secrets = yield* Secrets;
-    const clientPool = yield* makeClientPool<ImapFlow>();
-    const makeCandidate = (email: string) =>
-      Effect.gen(function* () {
-        const account = yield* config.getAccount(email);
-        const password = yield* secrets.getPassword(email);
-        const client = makeClient(account, password);
-        return {
-          client,
-          activate: connectClient(client, account.host),
-        } as const;
-      });
-    const clientFor = (email: string) =>
-      clientPool.clientFor(email, makeCandidate(email));
+    const { clientFor, closeAll } = yield* makeWarmClientCache(
+      (email: string) =>
+        Effect.gen(function* () {
+          const account = yield* config.getAccount(email);
+          const password = yield* secrets.getPassword(email);
+          const client = makeClient(account, password);
+          yield* connectClient(client, account.host);
+          return client;
+        }),
+    );
     const searchMailbox = (email: string, options: SearchOptions) =>
       clientFor(email).pipe(
         Effect.flatMap((client) => searchMailboxes(client, options)),
@@ -85,7 +81,7 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
           (candidate) => searchMailboxes(candidate, options),
         );
       });
-    yield* Effect.addFinalizer(() => clientPool.closeAll);
+    yield* Effect.addFinalizer(() => closeAll);
     return {
       verify: (email: string) => clientFor(email).pipe(Effect.asVoid),
       verifyCredentials: (
