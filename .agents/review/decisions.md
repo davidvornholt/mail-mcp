@@ -137,3 +137,10 @@ mechanical fixes. Resolved by the user on 2026-07-11.
 - Decision: The `{ hits, failures }` wire response intentionally applies to all-account and explicit-account searches.
 - Rationale: A uniform response contract is preferred; the breaking wire/schema change is accepted.
 - Scope: Do not re-report this response-shape break unless the decision changes.
+
+## D-2026-07-17-warm-cache-no-pool — Warm IMAP clients stay a simple single-flight Ref map; pool machinery rejected
+
+- Date: 2026-07-17
+- Decision: Bounded global search uses dedicated throwaway clients (`imap-client.ts`, `searchWithDedicatedClient`) and never touches the warm cache. The warm-client path stays a simple per-account single-flight `Ref<Map>` cache (`imap-warm-cache.ts`): one `Semaphore(1)` per account around cold opens, cache re-check inside the permit. Pool-style admission/convergence/stale-winner machinery (the former `imap-client-pool*` modules) is deliberately rejected for this single-user local tool, and hardening the cold-open path beyond `Semaphore(1)` is out of scope.
+- Rationale: The tool is a single-user local MCP server; the pool's winner admission and PubSub convergence solved races at a complexity cost that is not justified here. A stalled opener cannot hold a permit forever because makeClient's socketTimeout errors the connect.
+- Scope: Do not re-report the warm cache's simplicity (missing pooling, admission, convergence, or revalidation) as a finding unless the tool's threat or concurrency model changes.

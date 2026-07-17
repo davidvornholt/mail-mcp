@@ -28,7 +28,7 @@ type AccountSearchOutcome =
       readonly error: MailError;
     };
 
-type SearchMailbox = (
+export type SearchMailbox = (
   account: string,
   options: SearchOptions,
 ) => Effect.Effect<ReadonlyArray<MailboxSearchHit>, MailError>;
@@ -41,6 +41,7 @@ type SearchAccountsInput = {
     account: string,
   ) => Effect.Effect<unknown, UnknownAccountError>;
   readonly searchMailbox: SearchMailbox;
+  readonly searchMailboxWithinDeadline: SearchMailbox;
 };
 
 const searchConcurrency = 5;
@@ -149,6 +150,7 @@ export const searchAccounts = ({
   options,
   validateAccount,
   searchMailbox,
+  searchMailboxWithinDeadline,
 }: SearchAccountsInput): Effect.Effect<SearchResult, MailError> =>
   Effect.gen(function* () {
     const resolvedOptions = yield* resolveAccountSearchOptions({
@@ -157,7 +159,11 @@ export const searchAccounts = ({
       validateAccount,
     });
     if (account === undefined) {
-      return yield* searchAllAccounts(accounts, resolvedOptions, searchMailbox);
+      return yield* searchAllAccounts(
+        accounts,
+        resolvedOptions,
+        searchMailboxWithinDeadline,
+      );
     }
     return yield* searchOneAccount(account, resolvedOptions, searchMailbox);
   });
