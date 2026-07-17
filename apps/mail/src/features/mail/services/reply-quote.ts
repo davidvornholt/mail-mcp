@@ -1,4 +1,5 @@
 import type { FullMessage } from '../schemas/mail';
+import { safeAttributionText } from './attribution-safety';
 import { escapeHtml } from './text-to-html';
 
 type ReplyContent = {
@@ -26,14 +27,16 @@ const formatReplyDate = (value: string): string => {
 };
 
 const attributionFor = (message: FullMessage): string => {
-  if (message.attributionDate !== '' && message.from !== '') {
-    return `On ${formatReplyDate(message.attributionDate)}, ${message.from} wrote:`;
+  const attributionDate = safeAttributionText(message.attributionDate);
+  const from = safeAttributionText(message.from);
+  if (attributionDate !== '' && from !== '') {
+    return `On ${formatReplyDate(attributionDate)}, ${from} wrote:`;
   }
-  if (message.from !== '') {
-    return `${message.from} wrote:`;
+  if (from !== '') {
+    return `${from} wrote:`;
   }
-  if (message.attributionDate !== '') {
-    return `On ${formatReplyDate(message.attributionDate)}, the sender wrote:`;
+  if (attributionDate !== '') {
+    return `On ${formatReplyDate(attributionDate)}, the sender wrote:`;
   }
   return 'Previous message:';
 };
