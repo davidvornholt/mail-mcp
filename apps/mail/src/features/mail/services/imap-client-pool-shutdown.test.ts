@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Deferred, Effect, Fiber, Option } from 'effect';
+import { Deferred, Effect, Fiber } from 'effect';
 import { ControlledClient, lifecycleHit } from './imap-client.fixture';
 import { makeClientPool } from './imap-client-pool';
 
@@ -111,22 +111,18 @@ describe('makeClientPool terminal shutdown', () => {
         pool.clientFor('third@example.com', stalledCandidate(opening, started)),
       );
       yield* Deferred.await(started);
-      const closeFiber = yield* Effect.fork(pool.closeAll);
-      const closeResult = yield* Fiber.join(closeFiber).pipe(
-        Effect.timeoutOption('50 millis'),
-      );
+      yield* pool.closeAll;
       const closeCalls = [
         first.closeCalls,
         second.closeCalls,
         opening.closeCalls,
       ];
-      yield* Fiber.interrupt(closeFiber);
-      yield* Fiber.interrupt(openingFiber);
-      return { closeCalls, closeResult };
+      yield* Fiber.await(openingFiber);
+      return closeCalls;
     });
 
     const result = await Effect.runPromise(program);
-    expect(result.closeCalls).toEqual([1, 1, 1]);
-    expect(Option.isSome(result.closeResult)).toBe(true);
+    expect(result).toEqual([1, 1, 1]);
+    expect(first.logoutStarted).toBe(false);
   });
 });

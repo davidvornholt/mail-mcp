@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { Deferred, Effect, Fiber, Option } from 'effect';
+import { Deferred, Effect, Fiber } from 'effect';
 import { ImapError } from '../errors/errors';
 import { ControlledClient, lifecycleHit } from './imap-client.fixture';
 import { makeClientPool } from './imap-client-pool';
@@ -98,16 +98,13 @@ describe('makeClientPool same-account convergence', () => {
       yield* Deferred.await(stalledStarted);
       yield* Deferred.succeed(releaseWinner, undefined);
       yield* Fiber.join(winnerFiber);
-      const settled = yield* Fiber.join(stalledFiber).pipe(
-        Effect.timeoutOption('50 millis'),
-      );
-      yield* Fiber.interrupt(stalledFiber);
+      const settled = yield* Fiber.join(stalledFiber);
       yield* pool.closeAll;
       return settled;
     });
 
     const settled = await Effect.runPromise(program);
-    expect(Option.getOrUndefined(settled)).toBe(winner);
+    expect(settled).toBe(winner);
     expect(stalled.closeCalls).toBe(1);
     expect(winner.closeCalls).toBe(1);
   });
