@@ -30,6 +30,12 @@ export class SearchInputError extends Data.TaggedError('SearchInputError')<{
   readonly message: string;
 }> {}
 
+export class SearchAccountsError extends Data.TaggedError(
+  'SearchAccountsError',
+)<{
+  readonly message: string;
+}> {}
+
 export class FolderNotFoundError extends Data.TaggedError(
   'FolderNotFoundError',
 )<{
@@ -82,6 +88,7 @@ export type MailError =
   | KeyringError
   | ImapError
   | SearchInputError
+  | SearchAccountsError
   | FolderNotFoundError
   | MessageNotFoundError
   | AttachmentNotFoundError

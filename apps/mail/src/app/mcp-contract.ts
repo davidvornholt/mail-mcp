@@ -5,10 +5,10 @@ import {
 } from '../features/mail/schemas/mail';
 
 export const serverInstructions =
-  "Search and read configured mail accounts. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, pass the read message's folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve folder, uid, and uidValidity handles.";
+  "Search and read configured mail accounts. Omit account from search_mail to search all accounts; pass account to search one. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, use the read message's account and pass its folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve account, folder, uid, and uidValidity handles.";
 
 export const searchMailDescription = (accounts: string): string =>
-  `Search mail globally by default, one exact folder with scope='folder', or a folder plus descendants with scope='subtree'. Folder-based searches require an explicit scope. Global search prefers the server's all-mail mailbox; its fallback includes Inbox, Archive, Sent, and custom mail folders while excluding Drafts, Junk, Trash, and duplicate virtual folders. 'query' matches subject/body/from/to text; narrow with 'from'/'subject'/'since' (ISO date). Results are globally newest-first and return folder+uid handles for read_message. Accounts: ${accounts}`;
+  `Search all configured accounts when account is omitted, or one account when it is passed. scope='all' searches each selected account's user mail; scope='folder' searches one exact folder and scope='subtree' includes descendants. Folder-based searches require an account and explicit scope. Global search prefers each server's all-mail mailbox; its fallback includes Inbox, Archive, Sent, and custom mail folders while excluding Drafts, Junk, Trash, and duplicate virtual folders. 'query' matches subject/body/from/to text; narrow with 'from'/'subject'/'since' (ISO date). Results are deduplicated, globally newest-first, limited across accounts, and include account+folder+uid handles for read_message. Cross-account failures are returned alongside partial hits. Accounts: ${accounts}`;
 
 export const readOnlyAnnotations = { readOnlyHint: true } as const;
 export const draftWriteAnnotations = {
@@ -56,7 +56,10 @@ export const checkAccountsFields = {
 } as const;
 export const accountFields = { account: z.string() } as const;
 export const searchMailFields = {
-  account: z.string(),
+  account: z
+    .string()
+    .optional()
+    .describe('Omit to search all accounts; required for folder scopes.'),
   query: z.string().optional(),
   scope: z
     .enum(searchScopes)

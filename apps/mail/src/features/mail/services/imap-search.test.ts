@@ -57,9 +57,11 @@ const message = (
   uid: number,
   date: string,
   messageId: string,
+  emailId?: string,
 ): FetchMessageObject => ({
   seq: uid,
   uid,
+  emailId,
   internalDate: new Date(date),
   envelope: {
     date: new Date(date),
@@ -87,11 +89,11 @@ describe('searchMailboxes', () => {
       }),
     );
     expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({ folder: 'INBOX', uid: 1 });
+    expect(hits[0]?.hit).toMatchObject({ folder: 'INBOX', uid: 1 });
     expect(events).toEqual(['lock:INBOX', 'release:INBOX']);
   });
 
-  it('merges, deduplicates, globally sorts, and limits fallback folder results', async () => {
+  it('merges, deduplicates, sorts, and limits fallback folder results', async () => {
     const events: Array<string> = [];
     const folders = [
       listedFolder('INBOX', '\\Inbox'),
@@ -114,7 +116,7 @@ describe('searchMailboxes', () => {
     const hits = await Effect.runPromise(
       searchMailboxes(client, { scope: 'all', query: 'mail', limit: 2 }),
     );
-    expect(hits.map(({ folder, uid }) => ({ folder, uid }))).toEqual([
+    expect(hits.map(({ hit: { folder, uid } }) => ({ folder, uid }))).toEqual([
       { folder: 'Archive', uid: 2 },
       { folder: 'Sent', uid: sentUid },
     ]);
@@ -127,5 +129,46 @@ describe('searchMailboxes', () => {
       'lock:Sent',
       'release:Sent',
     ]);
+  });
+
+  it('preserves case-distinct IMAP email IDs', async () => {
+    const folders = [
+      listedFolder('INBOX', '\\Inbox'),
+      listedFolder('Archive', '\\Archive'),
+    ];
+    const client = fakeClient(
+      folders,
+      new Map([
+        [
+          'INBOX',
+          [
+            message(
+              1,
+              '2026-07-15T08:00:00Z',
+              '<same@example.com>',
+              'ObjectId',
+            ),
+          ],
+        ],
+        [
+          'Archive',
+          [
+            message(
+              2,
+              '2026-07-16T08:00:00Z',
+              '<same@example.com>',
+              'objectid',
+            ),
+          ],
+        ],
+      ]),
+      [],
+    );
+
+    const hits = await Effect.runPromise(
+      searchMailboxes(client, { scope: 'all', query: 'mail', limit: 20 }),
+    );
+
+    expect(hits.map(({ hit: { uid } }) => uid)).toEqual([2, 1]);
   });
 });

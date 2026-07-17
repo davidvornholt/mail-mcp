@@ -74,10 +74,13 @@ claude mcp add --scope user mail -- bun run <repo>/apps/mail/src/app/server.ts
 Once a password is stored, ask your MCP client to search your mail or compose a draft. You can also drive the review-first CLI yourself:
 
 ```bash
-mail search you@example.com invoice
+mail search invoice
+mail search --account you@example.com invoice
 ```
 
-Search is global by default. Use `--scope folder --folder INBOX` for one exact folder or `--scope subtree --folder Projects` for a folder and its descendants.
+Omitting `--account` searches every configured account, merges and deduplicates the results, and applies the limit globally. Pass `--account <email>` to search only that account. Each result includes its account handle, and failures from individual accounts are reported alongside partial results. If every account fails, the command fails with all account errors.
+
+Folder searches are account-specific: use `mail search --account you@example.com --scope folder --folder INBOX ...` for one exact folder or `--scope subtree --folder Projects` for a folder and its descendants.
 
 Not ready to link a global command? Every example also works as `bun run apps/mail/src/app/cli.ts <args>`.
 

@@ -21,9 +21,7 @@ const command: string = at(cliArgs, 0) ?? '';
 const account = at(cliArgs, 1);
 const tail = cliArgs.slice(2);
 
-// Failure contract: every error path — typed MailErrors, unknown accounts,
-// usage mistakes, and accounts that fail `mail status` — exits non-zero so
-// scripts can rely on the exit code.
+// Every error path exits non-zero so scripts can rely on the exit code.
 const flagFailure: Effect.Effect<void> = Effect.sync(() => {
   process.exitCode = 1;
 });
@@ -159,13 +157,12 @@ const program: Effect.Effect<void, MailError, Env> = Effect.gen(function* () {
       return yield* withAccount(account, loginCommand);
     case 'folders':
       return yield* withAccount(account, foldersCommand);
-    case 'search':
-      return yield* withAccount(account, (value) => {
-        const parsed = parseSearchArgs(tail);
-        return parsed._tag === 'invalid'
-          ? fail(parsed.message)
-          : searchCommand(value, parsed.input);
-      });
+    case 'search': {
+      const parsed = parseSearchArgs(cliArgs.slice(1));
+      return parsed._tag === 'invalid'
+        ? yield* fail(parsed.message)
+        : yield* searchCommand(parsed.account, parsed.input);
+    }
     case 'read':
       return yield* withAccount(account, (value) =>
         readCommand(value, at(tail, 0), at(tail, 1)),

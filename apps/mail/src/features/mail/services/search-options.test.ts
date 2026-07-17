@@ -5,7 +5,7 @@ import { resolveSearchOptions } from './search-options';
 const base = { limit: 20, query: 'invoice' } as const;
 
 describe('resolveSearchOptions', () => {
-  it('defaults to global search when neither scope nor folder is supplied', async () => {
+  it('defaults to all-mail scope when neither scope nor folder is supplied', async () => {
     await expect(
       Effect.runPromise(resolveSearchOptions(base)),
     ).resolves.toEqual({
@@ -42,7 +42,7 @@ describe('resolveSearchOptions', () => {
     });
   });
 
-  it('rejects a folder combined with global scope', async () => {
+  it('rejects a folder combined with all-mail scope', async () => {
     const error = await Effect.runPromise(
       Effect.flip(
         resolveSearchOptions({ ...base, scope: 'all', folder: 'INBOX' }),

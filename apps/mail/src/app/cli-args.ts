@@ -14,11 +14,12 @@ type ParsedMessageHandle =
 export type ParsedSearchArgs =
   | {
       readonly _tag: 'valid';
+      readonly account: string | undefined;
       readonly input: Pick<SearchOptionsInput, 'folder' | 'scope' | 'query'>;
     }
   | { readonly _tag: 'invalid'; readonly message: string };
 
-const searchFlagNames = new Set(['folder', 'scope']);
+const searchFlagNames = new Set(['account', 'folder', 'scope']);
 
 const toSearchScope = (value: string | undefined): SearchScope | undefined =>
   value !== undefined && isSearchScope(value) ? value : undefined;
@@ -62,6 +63,7 @@ export const parseSearchArgs = (
   );
   return {
     _tag: 'valid',
+    account: flags.get('account'),
     input: {
       folder: flags.get('folder'),
       scope,

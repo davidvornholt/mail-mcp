@@ -8,6 +8,26 @@ afterEach(async () => {
 });
 
 it(
+  'advertises optional account selection and search scopes',
+  async () => {
+    const client = await connectClient();
+    const searchSchema = (await client.listTools()).tools.find(
+      ({ name }) => name === 'search_mail',
+    )?.inputSchema;
+
+    expect(searchSchema).toMatchObject({
+      properties: {
+        account: { type: 'string' },
+        limit: { type: 'integer', exclusiveMinimum: 0 },
+        scope: { type: 'string', enum: ['all', 'folder', 'subtree'] },
+      },
+    });
+    expect(searchSchema?.required ?? []).not.toContain('account');
+  },
+  subprocessTimeoutMs,
+);
+
+it(
   'rejects invalid search scope and folder combinations before connecting',
   async () => {
     const client = await connectClient();
@@ -28,6 +48,18 @@ it(
         name: 'search_mail',
         arguments: { account: 'test@example.com', folder: 'INBOX' },
       },
+      {
+        name: 'search_mail',
+        arguments: { scope: 'folder', folder: 'INBOX' },
+      },
+      {
+        name: 'search_mail',
+        arguments: { scope: 'folder' },
+      },
+      {
+        name: 'search_mail',
+        arguments: { account: 'unknown@example.com', scope: 'folder' },
+      },
     ] as const;
 
     const results = await Promise.all(
@@ -38,6 +70,11 @@ it(
     expect(messages[0]).toContain('Do not pass folder');
     expect(messages[1]).toContain('requires a folder');
     expect(messages[2]).toContain('Do not pass folder');
+    expect(messages[3]).toContain('requires an account');
+    expect(messages[4]).toContain('requires an account');
+    expect(messages[4]).toContain('requires a folder');
+    expect(messages[5]).toContain('Unknown account');
+    expect(messages[5]).toContain('requires a folder');
   },
   subprocessTimeoutMs,
 );
