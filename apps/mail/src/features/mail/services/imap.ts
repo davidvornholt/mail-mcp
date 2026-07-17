@@ -9,6 +9,7 @@ import type {
   FolderInfo,
   FullMessage,
   SearchOptions,
+  SearchOptionsInput,
   SearchResult,
   UpdateDraftInput,
 } from '../schemas/mail';
@@ -114,7 +115,7 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
         clientFor(email).pipe(Effect.flatMap(listFolders)),
       search: (
         email: string | undefined,
-        options: SearchOptions,
+        options: SearchOptionsInput,
       ): Effect.Effect<SearchResult, MailError> =>
         searchAccounts({
           accounts: config.emails,

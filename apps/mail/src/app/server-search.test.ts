@@ -52,6 +52,14 @@ it(
         name: 'search_mail',
         arguments: { scope: 'folder', folder: 'INBOX' },
       },
+      {
+        name: 'search_mail',
+        arguments: { scope: 'folder' },
+      },
+      {
+        name: 'search_mail',
+        arguments: { account: 'unknown@example.com', scope: 'folder' },
+      },
     ] as const;
 
     const results = await Promise.all(
@@ -63,6 +71,10 @@ it(
     expect(messages[1]).toContain('requires a folder');
     expect(messages[2]).toContain('Do not pass folder');
     expect(messages[3]).toContain('requires an account');
+    expect(messages[4]).toContain('requires an account');
+    expect(messages[4]).toContain('requires a folder');
+    expect(messages[5]).toContain('Unknown account');
+    expect(messages[5]).toContain('requires a folder');
   },
   subprocessTimeoutMs,
 );

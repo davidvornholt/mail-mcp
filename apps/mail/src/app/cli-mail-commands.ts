@@ -2,7 +2,6 @@ import { Console, Effect } from 'effect';
 import type { MailError } from '../features/mail/errors/errors';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { Imap } from '../features/mail/services/imap';
-import { resolveSearchOptions } from '../features/mail/services/search-options';
 import type { ParsedSearchArgs } from './cli-args';
 
 export const foldersCommand = (
@@ -20,10 +19,9 @@ export const searchCommand = (
 ): Effect.Effect<void, MailError, Imap> =>
   Effect.gen(function* () {
     const imap = yield* Imap;
-    const options = yield* resolveSearchOptions({
+    const hits = yield* imap.search(email, {
       ...input,
       limit: defaultSearchLimit,
     });
-    const hits = yield* imap.search(email, options);
     yield* Console.log(JSON.stringify(hits, null, 2));
   });

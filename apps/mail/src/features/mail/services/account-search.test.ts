@@ -100,6 +100,26 @@ describe('searchAllAccounts', () => {
     ]);
   });
 
+  it('preserves case-distinct message IDs across accounts', async () => {
+    const result = await Effect.runPromise(
+      searchAllAccounts(
+        ['first@example.com', 'second@example.com'],
+        { ...options, limit: 20 },
+        (account) =>
+          Effect.succeed([
+            account === 'first@example.com'
+              ? hit(1, '<ABC@example.com>', '2026-07-15T08:00:00Z')
+              : hit(2, '<abc@example.com>', '2026-07-16T08:00:00Z'),
+          ]),
+      ),
+    );
+
+    expect(result.hits.map(({ subject }) => subject)).toEqual([
+      '<abc@example.com>',
+      '<ABC@example.com>',
+    ]);
+  });
+
   it('fails with every account error when no account can be searched', async () => {
     const result = await Effect.runPromise(
       Effect.flip(

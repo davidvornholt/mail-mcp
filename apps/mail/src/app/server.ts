@@ -4,7 +4,6 @@ import { Effect } from 'effect';
 import { defaultSearchLimit } from '../features/mail/schemas/mail';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
-import { resolveSearchOptions } from '../features/mail/services/search-options';
 import { checkAccounts } from '../features/mail/services/status';
 import {
   accountFields,
@@ -88,7 +87,7 @@ server.registerTool(
     runTool(
       Effect.gen(function* () {
         const imap = yield* Imap;
-        const options = yield* resolveSearchOptions({
+        return yield* imap.search(account, {
           scope,
           folder,
           query,
@@ -97,7 +96,6 @@ server.registerTool(
           since,
           limit: limit ?? defaultSearchLimit,
         });
-        return yield* imap.search(account, options);
       }),
     ),
 );

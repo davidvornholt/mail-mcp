@@ -2,10 +2,16 @@ import { Effect } from 'effect';
 import {
   type MailError,
   SearchAccountsError,
-  SearchInputError,
+  type UnknownAccountError,
 } from '../errors/errors';
-import type { SearchHit, SearchOptions, SearchResult } from '../schemas/mail';
+import type {
+  SearchHit,
+  SearchOptions,
+  SearchOptionsInput,
+  SearchResult,
+} from '../schemas/mail';
 import type { MailboxSearchHit } from './imap-search';
+import { resolveAccountSearchOptions } from './search-options';
 
 type AccountSearchHit = MailboxSearchHit & {
   readonly account: string;
@@ -30,10 +36,10 @@ type SearchMailbox = (
 type SearchAccountsInput = {
   readonly accounts: ReadonlyArray<string>;
   readonly account: string | undefined;
-  readonly options: SearchOptions;
+  readonly options: SearchOptionsInput;
   readonly validateAccount: (
     account: string,
-  ) => Effect.Effect<unknown, MailError>;
+  ) => Effect.Effect<unknown, UnknownAccountError>;
   readonly searchMailbox: SearchMailbox;
 };
 
@@ -50,7 +56,7 @@ const uniqueHits = (
 ): ReadonlyArray<AccountSearchHit> => {
   const seenMessageIds = new Set<string>();
   return hits.filter(({ messageId }) => {
-    const normalized = messageId.trim().toLowerCase();
+    const normalized = messageId.trim();
     if (normalized === '') {
       return true;
     }
@@ -145,16 +151,13 @@ export const searchAccounts = ({
   searchMailbox,
 }: SearchAccountsInput): Effect.Effect<SearchResult, MailError> =>
   Effect.gen(function* () {
+    const resolvedOptions = yield* resolveAccountSearchOptions({
+      account,
+      options,
+      validateAccount,
+    });
     if (account === undefined) {
-      if (options.scope !== 'all') {
-        return yield* Effect.fail(
-          new SearchInputError({
-            message: `Search scope "${options.scope}" requires an account.`,
-          }),
-        );
-      }
-      return yield* searchAllAccounts(accounts, options, searchMailbox);
+      return yield* searchAllAccounts(accounts, resolvedOptions, searchMailbox);
     }
-    yield* validateAccount(account);
-    return yield* searchOneAccount(account, options, searchMailbox);
+    return yield* searchOneAccount(account, resolvedOptions, searchMailbox);
   });

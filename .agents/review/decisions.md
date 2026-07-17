@@ -116,3 +116,24 @@ mechanical fixes. Resolved by the user on 2026-07-11.
 
 - Fix: `appendDraft` now appends with `['\\Draft', '\\Seen']` so agent-saved
   drafts do not surface as unread in the MUA.
+
+## D-2026-07-17-omitted-search-account — Omitted account searches all configured accounts
+
+- Date: 2026-07-17
+- Decision: Omitting `account` from CLI or MCP search intentionally searches every configured account.
+- Rationale: The helper has a single-user local threat model, and one all-account search is the intended default.
+- Scope: Do not re-report the omitted-account fan-out unless the threat model or product decision changes.
+
+## D-2026-07-17-positional-search-break — Legacy positional search syntax is not preserved
+
+- Date: 2026-07-17
+- Decision: The old `mail search <email> <query...>` form is intentionally neither preserved nor detected; focused searches use `--account`.
+- Rationale: The accepted CLI break avoids a compatibility branch and legacy parsing bloat.
+- Scope: Do not re-report this compatibility break unless the decision changes.
+
+## D-2026-07-17-uniform-search-response — Search responses uniformly use `{ hits, failures }`
+
+- Date: 2026-07-17
+- Decision: The `{ hits, failures }` wire response intentionally applies to all-account and explicit-account searches.
+- Rationale: A uniform response contract is preferred; the breaking wire/schema change is accepted.
+- Scope: Do not re-report this response-shape break unless the decision changes.

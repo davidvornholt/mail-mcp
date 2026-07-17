@@ -86,7 +86,7 @@ const uniqueCandidates = (
 ): ReadonlyArray<MailboxSearchHit> => {
   const seenMessageIds = new Set<string>();
   return candidates.filter((candidate) => {
-    const messageId = candidate.mailboxDeduplicationId.trim().toLowerCase();
+    const messageId = candidate.mailboxDeduplicationId.trim();
     if (messageId === '') {
       return true;
     }

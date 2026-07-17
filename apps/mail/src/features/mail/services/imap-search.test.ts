@@ -57,9 +57,11 @@ const message = (
   uid: number,
   date: string,
   messageId: string,
+  emailId?: string,
 ): FetchMessageObject => ({
   seq: uid,
   uid,
+  emailId,
   internalDate: new Date(date),
   envelope: {
     date: new Date(date),
@@ -127,5 +129,46 @@ describe('searchMailboxes', () => {
       'lock:Sent',
       'release:Sent',
     ]);
+  });
+
+  it('preserves case-distinct IMAP email IDs', async () => {
+    const folders = [
+      listedFolder('INBOX', '\\Inbox'),
+      listedFolder('Archive', '\\Archive'),
+    ];
+    const client = fakeClient(
+      folders,
+      new Map([
+        [
+          'INBOX',
+          [
+            message(
+              1,
+              '2026-07-15T08:00:00Z',
+              '<same@example.com>',
+              'ObjectId',
+            ),
+          ],
+        ],
+        [
+          'Archive',
+          [
+            message(
+              2,
+              '2026-07-16T08:00:00Z',
+              '<same@example.com>',
+              'objectid',
+            ),
+          ],
+        ],
+      ]),
+      [],
+    );
+
+    const hits = await Effect.runPromise(
+      searchMailboxes(client, { scope: 'all', query: 'mail', limit: 20 }),
+    );
+
+    expect(hits.map(({ hit: { uid } }) => uid)).toEqual([2, 1]);
   });
 });

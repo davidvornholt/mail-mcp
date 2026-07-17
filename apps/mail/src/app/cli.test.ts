@@ -61,14 +61,34 @@ describe('cli exit codes', () => {
   );
 
   it(
-    'folder search without an account exits before connecting',
+    'search validation reports simultaneous defects before connecting',
     () => {
-      const result = runCli(
-        ['search', '--scope', 'folder', '--folder', 'INBOX', 'invoice'],
+      const missingAccountAndFolder = runCli(
+        ['search', '--scope', 'folder', 'invoice'],
         fixturePath,
       );
-      expect(result.exitCode).toBe(1);
-      expect(result.stderr).toContain('requires an account');
+      expect(missingAccountAndFolder.exitCode).toBe(1);
+      expect(missingAccountAndFolder.stderr).toContain('requires an account');
+      expect(missingAccountAndFolder.stderr).toContain('requires a folder');
+
+      const unknownAccountAndMissingFolder = runCli(
+        [
+          'search',
+          '--account',
+          'nobody@example.com',
+          '--scope',
+          'folder',
+          'invoice',
+        ],
+        fixturePath,
+      );
+      expect(unknownAccountAndMissingFolder.exitCode).toBe(1);
+      expect(unknownAccountAndMissingFolder.stderr).toContain(
+        'Unknown account',
+      );
+      expect(unknownAccountAndMissingFolder.stderr).toContain(
+        'requires a folder',
+      );
     },
     subprocessTimeoutMs,
   );
