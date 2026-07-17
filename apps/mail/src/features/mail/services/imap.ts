@@ -1,7 +1,6 @@
 import { Effect } from 'effect';
 import type { ImapFlow } from 'imapflow';
 import type { MailError } from '../errors/errors';
-import type { Account } from '../schemas/account';
 import type {
   AttachmentContent,
   DraftInput,
@@ -20,27 +19,25 @@ import {
   closeClient,
   connectClient,
   makeClient,
-  makeClientPool,
   retireClient,
+  type WarmClient,
   withClientSearchDeadline,
 } from './imap-client';
+import { makeClientPool } from './imap-client-pool';
 import { listFolders, readMessage } from './imap-ops';
 import { searchMailboxes } from './imap-search';
 import { Secrets } from './secrets';
 
-const searchWithDedicatedClient = (
-  account: Account,
-  password: string,
-  options: SearchOptions,
+export const searchWithDedicatedClient = <Client extends WarmClient, Result>(
+  account: string,
+  createClient: () => Client,
+  search: (client: Client) => Effect.Effect<Result, MailError>,
 ) => {
-  const client = makeClient(account, password);
+  const client = createClient();
   return withClientSearchDeadline(
-    account.email,
+    account,
     client,
-    (candidate) =>
-      connectClient(candidate, account.host).pipe(
-        Effect.andThen(searchMailboxes(candidate, options)),
-      ),
+    search,
     retireClient(client),
   );
 };
@@ -54,24 +51,22 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
     const config = yield* MailConfig;
     const secrets = yield* Secrets;
     const clientPool = yield* makeClientPool<ImapFlow>();
-
-    const open = (email: string) =>
+    const makeCandidate = (email: string) =>
       Effect.gen(function* () {
         const account = yield* config.getAccount(email);
         const password = yield* secrets.getPassword(email);
         const client = makeClient(account, password);
-        yield* connectClient(client, account.host);
-        return client;
+        return {
+          client,
+          activate: connectClient(client, account.host),
+        } as const;
       });
-
     const clientFor = (email: string) =>
-      clientPool.clientFor(email, open(email));
-
+      clientPool.clientFor(email, makeCandidate(email));
     const searchMailbox = (email: string, options: SearchOptions) =>
       clientFor(email).pipe(
         Effect.flatMap((client) => searchMailboxes(client, options)),
       );
-
     const searchMailboxWithinDeadline = (
       email: string,
       options: SearchOptions,
@@ -79,11 +74,16 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
       Effect.gen(function* () {
         const account = yield* config.getAccount(email);
         const password = yield* secrets.getPassword(email);
-        return yield* searchWithDedicatedClient(account, password, options);
+        return yield* searchWithDedicatedClient(
+          email,
+          () => makeClient(account, password),
+          (candidate) =>
+            connectClient(candidate, account.host).pipe(
+              Effect.andThen(searchMailboxes(candidate, options)),
+            ),
+        );
       });
-
     yield* Effect.addFinalizer(() => clientPool.closeAll);
-
     return {
       verify: (email: string) => clientFor(email).pipe(Effect.asVoid),
       verifyCredentials: (

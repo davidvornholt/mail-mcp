@@ -7,7 +7,7 @@ import {
 } from '../errors/errors';
 import type { Account } from '../schemas/account';
 
-type WarmClient = {
+export type WarmClient = {
   usable: boolean;
   close: () => void;
   logout: () => Promise<void>;
@@ -74,71 +74,6 @@ export const closeClient = (client: WarmClient): Effect.Effect<void> =>
       : Effect.void,
   );
 
-export const makeClientPool = <Client extends WarmClient>() =>
-  Effect.gen(function* () {
-    const clients = yield* Ref.make<ReadonlyMap<string, Client>>(new Map());
-    const locks = yield* Ref.make<ReadonlyMap<string, Effect.Semaphore>>(
-      new Map(),
-    );
-    const lockRegistry = yield* Effect.makeSemaphore(1);
-
-    const remember = (email: string, client: Client) =>
-      Ref.update(clients, (map) => new Map(map).set(email, client));
-
-    const lockFor = (email: string) =>
-      lockRegistry.withPermits(1)(
-        Effect.gen(function* () {
-          const existing = (yield* Ref.get(locks)).get(email);
-          if (existing !== undefined) {
-            return existing;
-          }
-          const created = yield* Effect.makeSemaphore(1);
-          yield* Ref.update(locks, (map) => new Map(map).set(email, created));
-          return created;
-        }),
-      );
-
-    const clientFor = <E>(
-      email: string,
-      open: Effect.Effect<Client, E>,
-    ): Effect.Effect<Client, E> =>
-      lockFor(email).pipe(
-        Effect.flatMap((lock) =>
-          lock.withPermits(1)(
-            Ref.get(clients).pipe(
-              Effect.flatMap((map) => {
-                const existing = map.get(email);
-                if (existing?.usable === true) {
-                  return Effect.succeed(existing);
-                }
-                const removeExisting =
-                  existing === undefined
-                    ? Effect.void
-                    : Ref.update(clients, (current) => {
-                        const remaining = new Map(current);
-                        remaining.delete(email);
-                        return remaining;
-                      }).pipe(Effect.andThen(retireClient(existing)));
-                return removeExisting.pipe(
-                  Effect.andThen(
-                    open.pipe(Effect.tap((client) => remember(email, client))),
-                  ),
-                );
-              }),
-            ),
-          ),
-        ),
-      );
-
-    const closeAll = Ref.get(clients).pipe(
-      Effect.flatMap((map) =>
-        Effect.forEach([...map.values()], closeClient, { discard: true }),
-      ),
-    );
-
-    return { clientFor, closeAll } as const;
-  });
-
 export const withClientSearchDeadline = <Client, Result>(
   account: string,
   client: Client,
@@ -155,8 +90,7 @@ export const withClientSearchDeadline = <Client, Result>(
         alreadyRetired ? Effect.void : retire,
       ),
     );
-    const operation = search(client).pipe(
-      Effect.ensuring(retireOnce),
+    return yield* search(client).pipe(
       // The deadline may win while native IMAP promises or iterators continue.
       Effect.disconnect,
       Effect.timeoutFail({
@@ -167,10 +101,7 @@ export const withClientSearchDeadline = <Client, Result>(
             message: `Search for ${account} did not complete within ${accountSearchTimeoutSeconds} seconds. Retry with this account alone or check the server.`,
           }),
       }),
-    );
-    return yield* operation.pipe(
-      Effect.catchTag('AccountSearchTimeoutError', (error) =>
-        retireOnce.pipe(Effect.andThen(Effect.fail(error))),
-      ),
+      // Keep retirement outside disconnect so caller interruption also owns it.
+      Effect.ensuring(retireOnce),
     );
   });

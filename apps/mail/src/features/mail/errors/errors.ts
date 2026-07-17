@@ -26,6 +26,12 @@ export class ImapError extends Data.TaggedError('ImapError')<{
   readonly message: string;
 }> {}
 
+export class ClientPoolClosedError extends Data.TaggedError(
+  'ClientPoolClosedError',
+)<{
+  readonly message: string;
+}> {}
+
 export class SearchInputError extends Data.TaggedError('SearchInputError')<{
   readonly message: string;
 }> {}
@@ -94,6 +100,7 @@ export type MailError =
   | MissingPasswordError
   | KeyringError
   | ImapError
+  | ClientPoolClosedError
   | SearchInputError
   | SearchAccountsError
   | AccountSearchTimeoutError

@@ -19,7 +19,13 @@ describe('deadline client isolation', () => {
     const replacement = new ControlledClient([lifecycleHit]);
     const program = Effect.gen(function* () {
       const fiber = yield* Effect.fork(boundedFailure(stalled));
-      yield* TestClock.adjust('30 seconds');
+      yield* TestClock.adjust('29999 millis');
+      const beforeDeadline = {
+        closeCalls: stalled.closeCalls,
+        outstanding: stalled.outstanding,
+        usable: stalled.usable,
+      };
+      yield* TestClock.adjust('1 millis');
       const error = yield* Fiber.join(fiber);
       const replacementResult = yield* withClientSearchDeadline(
         'stalled@example.com',
@@ -27,13 +33,21 @@ describe('deadline client isolation', () => {
         (client) => client.search(),
         Effect.sync(() => replacement.close()),
       );
-      return { error, replacementResult };
+      return { beforeDeadline, error, replacementResult };
     });
 
     const result = await Effect.runPromise(
       program.pipe(Effect.provide(TestContext.TestContext)),
     );
-    expect(result.error).toMatchObject({ _tag: 'AccountSearchTimeoutError' });
+    expect(result.beforeDeadline).toEqual({
+      closeCalls: 0,
+      outstanding: 1,
+      usable: true,
+    });
+    expect(result.error).toMatchObject({
+      _tag: 'AccountSearchTimeoutError',
+      message: expect.stringContaining('30 seconds'),
+    });
     expect(stalled).toMatchObject({
       usable: false,
       outstanding: 0,
@@ -43,6 +57,39 @@ describe('deadline client isolation', () => {
     expect(replacement.closeCalls).toBe(1);
   });
 
+  it('retires repeated uninterruptible work when the outer caller is interrupted', async () => {
+    const clients = [
+      new ControlledClient(undefined),
+      new ControlledClient(undefined),
+    ];
+    const program = Effect.gen(function* () {
+      for (const client of clients) {
+        const fiber = yield* Effect.fork(
+          withClientSearchDeadline(
+            'stalled@example.com',
+            client,
+            (candidate) => candidate.search(),
+            Effect.sync(() => client.close()),
+          ),
+        );
+        yield* Effect.yieldNow();
+        yield* Fiber.interrupt(fiber);
+      }
+    });
+
+    await Effect.runPromise(program);
+
+    for (const client of clients) {
+      expect(client).toMatchObject({
+        usable: false,
+        outstanding: 0,
+        closeCalls: 1,
+      });
+    }
+  });
+});
+
+describe('deadline client separation', () => {
   it('does not abort warm work or a staggered deadline client', async () => {
     const warm = new ControlledClient(undefined);
     const first = new ControlledClient(undefined);
