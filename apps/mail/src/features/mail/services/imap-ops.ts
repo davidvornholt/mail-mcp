@@ -39,12 +39,15 @@ const toFolderInfo = (folder: ListResponse): FolderInfo => ({
 });
 
 const rawHeaderValue = (parsed: ParsedMail, key: string): string => {
-  const line = parsed.headerLines.find((header) => header.key === key)?.line;
+  const line = parsed.headerLines.findLast(
+    (header) => header.key === key,
+  )?.line;
   if (line === undefined) {
     return '';
   }
-  const separator = line.indexOf(':');
-  return separator === -1 ? '' : line.slice(separator + 1).trim();
+  const unfolded = line.replaceAll(/\r?\n[ \t]+/gu, ' ');
+  const separator = unfolded.indexOf(':');
+  return separator === -1 ? '' : unfolded.slice(separator + 1).trim();
 };
 
 const toFullMessage = (
