@@ -2,6 +2,9 @@ import { describe, expect, it } from 'bun:test';
 import type { FullMessage } from '../schemas/mail';
 import { buildReplyContent } from './reply-quote';
 
+const replyAttributionPattern =
+  /^It is\.\n\nOn July \d{1,2}, 2026 at \d{2}:\d{2}, Sender & Co <sender@example\.com> wrote:\n> Is 2 < 3\?\n> Yes & no\.$/u;
+
 const message: FullMessage = {
   uid: 42,
   folder: 'INBOX',
@@ -22,15 +25,8 @@ describe('buildReplyContent', () => {
   it('adds a plain-text quotation without duplicating references', () => {
     const result = buildReplyContent('It is.', '<p>It is.</p>', message);
 
-    expect(result.text).toBe(
-      [
-        'It is.',
-        '',
-        'On 2026-07-13T08:30:00.000Z, Sender & Co <sender@example.com> wrote:',
-        '> Is 2 < 3?',
-        '> Yes & no.',
-      ].join('\n'),
-    );
+    expect(result.text).toMatch(replyAttributionPattern);
+    expect(result.text).not.toContain(message.date);
     expect(result.inReplyTo).toBe('<current@example.com>');
     expect(result.references).toEqual([
       '<first@example.com>',
@@ -60,5 +56,16 @@ describe('buildReplyContent', () => {
       '<first@example.com>',
       '<current@example.com>',
     ]);
+  });
+
+  it('preserves an unrecognized date instead of dropping the attribution', () => {
+    const result = buildReplyContent('It is.', '<p>It is.</p>', {
+      ...message,
+      date: 'A recent Tuesday',
+    });
+
+    expect(result.text).toContain(
+      'On A recent Tuesday, Sender & Co <sender@example.com> wrote:',
+    );
   });
 });

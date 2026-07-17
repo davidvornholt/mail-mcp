@@ -5,6 +5,9 @@ import type { Account } from '../schemas/account';
 import type { DraftInput, FullMessage } from '../schemas/mail';
 import { buildMime } from './mime';
 
+const quotedReplyPattern =
+  /^My answer\.\n\nOn July \d{1,2}, 2026 at \d{2}:\d{2}, Original Sender <original@example\.com> wrote:\n> First line\n>\n> Second line$/u;
+
 const account: Account = {
   email: 'sender@example.com',
   name: 'Example Sender',
@@ -100,16 +103,8 @@ describe('buildMime', () => {
       },
     );
 
-    expect(parsed.text?.trimEnd()).toBe(
-      [
-        'My answer.',
-        '',
-        'On 2026-07-13T08:30:00.000Z, Original Sender <original@example.com> wrote:',
-        '> First line',
-        '>',
-        '> Second line',
-      ].join('\n'),
-    );
+    expect(parsed.text?.trimEnd()).toMatch(quotedReplyPattern);
+    expect(parsed.text).not.toContain('2026-07-13T08:30:00.000Z');
     expect(parsed.html).toContain('<p>My answer.</p>');
     expect(parsed.html).toContain(
       '<blockquote type="cite">First line<br><br>Second line</blockquote>',
