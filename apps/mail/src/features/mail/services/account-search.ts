@@ -1,6 +1,5 @@
-import { Duration, Effect } from 'effect';
+import { Effect } from 'effect';
 import {
-  AccountSearchTimeoutError,
   type MailError,
   SearchAccountsError,
   type UnknownAccountError,
@@ -29,7 +28,7 @@ type AccountSearchOutcome =
       readonly error: MailError;
     };
 
-type SearchMailbox = (
+export type SearchMailbox = (
   account: string,
   options: SearchOptions,
 ) => Effect.Effect<ReadonlyArray<MailboxSearchHit>, MailError>;
@@ -42,33 +41,10 @@ type SearchAccountsInput = {
     account: string,
   ) => Effect.Effect<unknown, UnknownAccountError>;
   readonly searchMailbox: SearchMailbox;
+  readonly searchMailboxWithinDeadline: SearchMailbox;
 };
 
 const searchConcurrency = 5;
-
-// Per-account deadline for the global fan-out so one stalled server cannot
-// withhold healthy accounts' results. Must stay below the socketTimeout in
-// imap.ts so this structured failure fires before the socket-level one.
-const accountSearchTimeoutSeconds = 30;
-
-const boundAccountSearch = <A>(
-  account: string,
-  search: Effect.Effect<A, MailError>,
-): Effect.Effect<A, MailError> =>
-  search.pipe(
-    // disconnect lets the timeout win immediately even if the underlying IMAP
-    // operation sits in an uninterruptible region; the abandoned connection is
-    // reaped by the client-level socketTimeout.
-    Effect.disconnect,
-    Effect.timeoutFail({
-      duration: Duration.seconds(accountSearchTimeoutSeconds),
-      onTimeout: () =>
-        new AccountSearchTimeoutError({
-          account,
-          message: `Search for ${account} did not complete within ${accountSearchTimeoutSeconds} seconds. Retry with this account alone or check the server.`,
-        }),
-    }),
-  );
 
 const newestFirst = (left: AccountSearchHit, right: AccountSearchHit): number =>
   right.receivedAt.localeCompare(left.receivedAt) ||
@@ -119,7 +95,7 @@ export const searchAllAccounts = (
     const outcomes = yield* Effect.forEach(
       accounts,
       (account) =>
-        boundAccountSearch(account, searchMailbox(account, options)).pipe(
+        searchMailbox(account, options).pipe(
           Effect.match({
             onFailure: (error): AccountSearchOutcome => ({
               _tag: 'failure',
@@ -174,6 +150,7 @@ export const searchAccounts = ({
   options,
   validateAccount,
   searchMailbox,
+  searchMailboxWithinDeadline,
 }: SearchAccountsInput): Effect.Effect<SearchResult, MailError> =>
   Effect.gen(function* () {
     const resolvedOptions = yield* resolveAccountSearchOptions({
@@ -182,7 +159,11 @@ export const searchAccounts = ({
       validateAccount,
     });
     if (account === undefined) {
-      return yield* searchAllAccounts(accounts, resolvedOptions, searchMailbox);
+      return yield* searchAllAccounts(
+        accounts,
+        resolvedOptions,
+        searchMailboxWithinDeadline,
+      );
     }
     return yield* searchOneAccount(account, resolvedOptions, searchMailbox);
   });

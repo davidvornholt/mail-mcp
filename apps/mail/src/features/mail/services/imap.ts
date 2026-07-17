@@ -1,12 +1,10 @@
-import { Effect, Ref } from 'effect';
-import { ImapFlow } from 'imapflow';
-import { ImapError, type MailError } from '../errors/errors';
-import type { Account } from '../schemas/account';
+import { Effect } from 'effect';
+import type { ImapFlow } from 'imapflow';
+import type { MailError } from '../errors/errors';
 import type {
   AttachmentContent,
   DraftInput,
   DraftLocation,
-  FolderInfo,
   FullMessage,
   SearchOptions,
   SearchOptionsInput,
@@ -17,45 +15,16 @@ import { searchAccounts } from './account-search';
 import { readAttachment } from './attachment';
 import { MailConfig } from './config';
 import { removeDraft, replaceDraft, writeDraft } from './draft';
+import {
+  closeClient,
+  connectClient,
+  makeClient,
+  makeClientPool,
+  withClientSearchDeadline,
+} from './imap-client';
 import { listFolders, readMessage } from './imap-ops';
 import { searchMailboxes } from './imap-search';
 import { Secrets } from './secrets';
-
-const closeClient = (client: ImapFlow): Effect.Effect<void> =>
-  Effect.promise(() => client.logout().catch(() => undefined));
-
-const makeClient = (account: Account, password: string): ImapFlow =>
-  new ImapFlow({
-    host: account.host,
-    port: account.port,
-    secure: account.secure,
-    // Force STARTTLS on non-implicit-TLS connections so the password is never sent in cleartext; leave it unset for secure=true, which imapflow rejects alongside doSTARTTLS.
-    doSTARTTLS: account.secure ? undefined : true,
-    auth: { user: account.user, pass: password },
-    logger: false,
-    connectionTimeout: 15_000,
-    greetingTimeout: 15_000,
-    // Backstop for silent sockets. Must exceed the per-account search deadline
-    // in account-search.ts so the structured timeout failure fires first.
-    socketTimeout: 60_000,
-  });
-
-const connect = (
-  client: ImapFlow,
-  host: string,
-): Effect.Effect<void, ImapError> =>
-  Effect.tryPromise({
-    try: () => client.connect(),
-    catch: (cause) =>
-      new ImapError({
-        message: `connect to ${host} failed: ${String(cause)}`,
-      }),
-  });
-
-const closeAll = (
-  clients: ReadonlyMap<string, ImapFlow>,
-): Effect.Effect<void> =>
-  Effect.forEach([...clients.values()], closeClient, { discard: true });
 
 // One IMAP service instance keeps a warm, authenticated connection per account
 // so the MCP server reuses it across tool calls. Connections are closed by the
@@ -65,40 +34,40 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
   scoped: Effect.gen(function* () {
     const config = yield* MailConfig;
     const secrets = yield* Secrets;
-    const clients = yield* Ref.make<ReadonlyMap<string, ImapFlow>>(new Map());
+    const clientPool = yield* makeClientPool<ImapFlow>();
 
     const open = (email: string) =>
       Effect.gen(function* () {
         const account = yield* config.getAccount(email);
         const password = yield* secrets.getPassword(email);
         const client = makeClient(account, password);
-        yield* connect(client, account.host);
-        yield* Ref.update(clients, (map) => new Map(map).set(email, client));
+        yield* connectClient(client, account.host);
         return client;
       });
 
     const clientFor = (email: string) =>
-      Ref.get(clients).pipe(
-        Effect.flatMap((map) => {
-          const existing = map.get(email);
-          return existing?.usable === true
-            ? Effect.succeed(existing)
-            : open(email);
-        }),
-      );
+      clientPool.clientFor(email, open(email));
 
     const searchMailbox = (email: string, options: SearchOptions) =>
       clientFor(email).pipe(
         Effect.flatMap((client) => searchMailboxes(client, options)),
       );
 
-    yield* Effect.addFinalizer(() =>
-      Effect.flatMap(Ref.get(clients), closeAll),
-    );
+    const searchMailboxWithinDeadline = (
+      email: string,
+      options: SearchOptions,
+    ) =>
+      withClientSearchDeadline(
+        email,
+        clientFor(email),
+        (client) => searchMailboxes(client, options),
+        (client) => clientPool.retire(email, client),
+      );
+
+    yield* Effect.addFinalizer(() => clientPool.closeAll);
 
     return {
-      verify: (email: string): Effect.Effect<void, MailError> =>
-        clientFor(email).pipe(Effect.asVoid),
+      verify: (email: string) => clientFor(email).pipe(Effect.asVoid),
       verifyCredentials: (
         email: string,
         password: string,
@@ -108,13 +77,11 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
           const client = makeClient(account, password);
           yield* Effect.acquireUseRelease(
             Effect.succeed(client),
-            (candidate) => connect(candidate, account.host),
+            (candidate) => connectClient(candidate, account.host),
             closeClient,
           );
         }),
-      listFolders: (
-        email: string,
-      ): Effect.Effect<ReadonlyArray<FolderInfo>, MailError> =>
+      listFolders: (email: string) =>
         clientFor(email).pipe(Effect.flatMap(listFolders)),
       search: (
         email: string | undefined,
@@ -126,6 +93,7 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
           options,
           validateAccount: config.getAccount,
           searchMailbox,
+          searchMailboxWithinDeadline,
         }),
       read: (
         email: string,
