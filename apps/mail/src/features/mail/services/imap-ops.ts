@@ -4,6 +4,7 @@ import { type AddressObject, type ParsedMail, simpleParser } from 'mailparser';
 import { ImapError, MessageNotFoundError } from '../errors/errors';
 import type { FolderInfo, FullMessage } from '../schemas/mail';
 import { listAttachments } from './attachment-metadata';
+import { safeAttributionText } from './attribution-safety';
 import { lockMailbox } from './mailbox-lock';
 
 export const imapError =
@@ -38,6 +39,20 @@ const toFolderInfo = (folder: ListResponse): FolderInfo => ({
   subscribed: folder.subscribed,
 });
 
+const rawHeaderValue = (parsed: ParsedMail, key: string): string => {
+  const line = parsed.headerLines.findLast(
+    (header) => header.key === key,
+  )?.line;
+  if (line === undefined) {
+    return '';
+  }
+  const unfolded = line.replaceAll(/\r?\n[ \t]+/gu, ' ');
+  const separator = unfolded.indexOf(':');
+  return separator === -1
+    ? ''
+    : safeAttributionText(unfolded.slice(separator + 1).trim());
+};
+
 const toFullMessage = (
   parsed: ParsedMail,
   folder: string,
@@ -50,6 +65,7 @@ const toFullMessage = (
   cc: addressText(parsed.cc),
   subject: parsed.subject ?? '',
   date: parsed.date?.toISOString() ?? '',
+  attributionDate: rawHeaderValue(parsed, 'date'),
   messageId: parsed.messageId ?? '',
   inReplyTo: parsed.inReplyTo ?? '',
   references: toReferences(parsed.references),

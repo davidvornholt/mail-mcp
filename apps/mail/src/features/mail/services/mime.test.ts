@@ -91,6 +91,7 @@ describe('buildMime', () => {
         cc: '',
         subject: 'Question',
         date: '2026-07-13T08:30:00.000Z',
+        attributionDate: '2026-07-13T08:30:00',
         messageId: '<current@example.com>',
         inReplyTo: '<first@example.com>',
         references: ['<first@example.com>'],
@@ -101,18 +102,10 @@ describe('buildMime', () => {
     );
 
     expect(parsed.text?.trimEnd()).toBe(
-      [
-        'My answer.',
-        '',
-        'On 2026-07-13T08:30:00.000Z, Original Sender <original@example.com> wrote:',
-        '> First line',
-        '>',
-        '> Second line',
-      ].join('\n'),
+      'My answer.\n\nOn July 13, 2026 at 08:30, Original Sender <original@example.com> wrote:\n> First line\n>\n> Second line',
     );
-    expect(parsed.html).toContain('<p>My answer.</p>');
-    expect(parsed.html).toContain(
-      '<blockquote type="cite">First line<br><br>Second line</blockquote>',
+    expect(parsed.html).toBe(
+      '<p>My answer.</p>\n<p>On July 13, 2026 at 08:30, Original Sender &lt;original@example.com&gt; wrote:</p>\n<blockquote type="cite">First line<br><br>Second line</blockquote>',
     );
     expect(parsed.inReplyTo).toBe('<current@example.com>');
     expect(parsed.references).toEqual([

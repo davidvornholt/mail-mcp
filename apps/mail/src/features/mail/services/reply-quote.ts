@@ -1,4 +1,5 @@
 import type { FullMessage } from '../schemas/mail';
+import { safeAttributionText } from './attribution-safety';
 import { escapeHtml } from './text-to-html';
 
 type ReplyContent = {
@@ -8,15 +9,34 @@ type ReplyContent = {
   readonly references: ReadonlyArray<string>;
 };
 
+const replyDateFormatter = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'long',
+});
+
+const replyTimeFormatter = new Intl.DateTimeFormat('en-US', {
+  hourCycle: 'h23',
+  timeStyle: 'short',
+});
+
+const formatReplyDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return `${replyDateFormatter.format(date)} at ${replyTimeFormatter.format(date)}`;
+};
+
 const attributionFor = (message: FullMessage): string => {
-  if (message.date !== '' && message.from !== '') {
-    return `On ${message.date}, ${message.from} wrote:`;
+  const attributionDate = safeAttributionText(message.attributionDate);
+  const from = safeAttributionText(message.from);
+  if (attributionDate !== '' && from !== '') {
+    return `On ${formatReplyDate(attributionDate)}, ${from} wrote:`;
   }
-  if (message.from !== '') {
-    return `${message.from} wrote:`;
+  if (from !== '') {
+    return `${from} wrote:`;
   }
-  if (message.date !== '') {
-    return `On ${message.date}, the sender wrote:`;
+  if (attributionDate !== '') {
+    return `On ${formatReplyDate(attributionDate)}, the sender wrote:`;
   }
   return 'Previous message:';
 };
