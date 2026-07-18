@@ -13,7 +13,7 @@
     "standards": "standards"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.2",
+    "@biomejs/biome": "2.5.4",
     "@davidvornholt/standards": "0.8.0",
     "turbo": "^2.10.5",
     "typescript": "7.0.2"
