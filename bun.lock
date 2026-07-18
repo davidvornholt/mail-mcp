@@ -6,7 +6,7 @@
       "name": "mail-mcp",
       "devDependencies": {
         "@biomejs/biome": "2.5.2",
-        "@davidvornholt/standards": "0.8.0",
+        "@davidvornholt/standards": "0.10.0",
         "turbo": "^2.10.5",
         "typescript": "7.0.2",
       },
@@ -81,7 +81,7 @@
 
     "@davidvornholt/a11y-testing": ["@davidvornholt/a11y-testing@workspace:packages/a11y-testing"],
 
-    "@davidvornholt/standards": ["@davidvornholt/standards@0.8.0", "", { "bin": { "standards": "src/cli.ts" } }, "sha512-Z3s1cuEcexrs5mMfZvkNTbWUxmg2GV1g24d8dpD9ZXNLG4jyjQ/EKVC7bOygjcregMgJPy1jyq5c78oU2OjpTA=="],
+    "@davidvornholt/standards": ["@davidvornholt/standards@0.10.0", "", { "bin": { "standards": "src/cli.ts" } }, "sha512-1WGSjLZn6sPzdXycqs6K2Fh8YdchbNDniwhXK8gZmnOZug0fLAjZxvUwlS8t+ZLMyJdTP6LacGMK3GngAuDfmg=="],
 
     "@davidvornholt/typescript-config": ["@davidvornholt/typescript-config@workspace:packages/typescript-config"],
 
