@@ -17,7 +17,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@napi-rs/keyring": "^1.3.0",
-    "effect": "^3.21.4",
+    "effect": "^3.22.0",
     "imapflow": "^1.4.7",
     "mailparser": "^3.9.14",
     "nodemailer": "^9.0.3",
