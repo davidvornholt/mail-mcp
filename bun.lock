@@ -6,7 +6,7 @@
       "name": "mail-mcp",
       "devDependencies": {
         "@biomejs/biome": "2.5.2",
-        "@davidvornholt/standards": "0.8.0",
+        "@davidvornholt/standards": "0.17.3",
         "turbo": "^2.10.5",
         "typescript": "7.0.2",
       },
@@ -81,7 +81,7 @@
 
     "@davidvornholt/a11y-testing": ["@davidvornholt/a11y-testing@workspace:packages/a11y-testing"],
 
-    "@davidvornholt/standards": ["@davidvornholt/standards@0.8.0", "", { "bin": { "standards": "src/cli.ts" } }, "sha512-Z3s1cuEcexrs5mMfZvkNTbWUxmg2GV1g24d8dpD9ZXNLG4jyjQ/EKVC7bOygjcregMgJPy1jyq5c78oU2OjpTA=="],
+    "@davidvornholt/standards": ["@davidvornholt/standards@0.17.3", "", { "dependencies": { "yaml": "^2.9.0" }, "bin": { "standards": "src/cli.ts" } }, "sha512-rcWCQZYoNvdRsBe/W9VoWLx5QF9iBEcq7Qc8GYREJZ6dkM/GK+5OqG4GKxGSqTJewasyIb27RZCnDw7yctSVxA=="],
 
     "@davidvornholt/typescript-config": ["@davidvornholt/typescript-config@workspace:packages/typescript-config"],
 
@@ -458,6 +458,8 @@
     "which": ["which@2.0.2", "", { "dependencies": { "isexe": "^2.0.0" }, "bin": { "node-which": "./bin/node-which" } }, "sha512-BLI3Tl1TW3Pvl70l3yq3Y64i+awpwXqsGBYWkkqMtnbXgrMD+yj7rhW0kuEDxzJaYXGjEW5ogapKNMEKNMjibA=="],
 
     "wrappy": ["wrappy@1.0.2", "", {}, "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ=="],
+
+    "yaml": ["yaml@2.9.0", "", { "bin": { "yaml": "bin.mjs" } }, "sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA=="],
 
     "zod": ["zod@4.4.3", "", {}, "sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ=="],
 
