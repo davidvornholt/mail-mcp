@@ -47,16 +47,19 @@ codex mcp get mail
 ```
 
 Codex defers MCP tool definitions until they are relevant, so registering the
-server does not eagerly add every mail tool schema to the model context. Restart
-Codex after adding it, then use `/mcp` to inspect the connected server.
+server does not eagerly add every mail tool schema to the model context. On
+Linux, add the Secret Service session variables to the generated entry before
+restarting Codex; without them, the MCP process cannot see passwords that the
+CLI stored in the OS keyring.
 
-For explicit write approvals and more headroom for IMAP operations, edit the
-generated entry in `~/.codex/config.toml`:
+Edit the generated entry in `~/.codex/config.toml` to forward those variables,
+require explicit write approvals, and give IMAP operations more headroom:
 
 ```toml
 [mcp_servers.mail]
 command = "bun"
 args = ["run", "<repo>/apps/mail/src/app/server.ts"]
+env_vars = ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"]
 startup_timeout_sec = 15
 tool_timeout_sec = 120
 default_tools_approval_mode = "writes"
@@ -64,6 +67,9 @@ default_tools_approval_mode = "writes"
 [mcp_servers.mail.tools.delete_draft]
 approval_mode = "prompt"
 ```
+
+Restart Codex after changing the entry, then use `/mcp` to inspect the connected
+server.
 
 For Claude Code (user scope), use:
 
