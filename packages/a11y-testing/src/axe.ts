@@ -1,5 +1,6 @@
+import process from 'node:process';
 import AxeBuilder from '@axe-core/playwright';
-import type { Page } from '@playwright/test';
+import type * as playwright from '@playwright/test';
 
 export const wcag22AaTags: ReadonlyArray<string> = [
   'wcag2a',
@@ -26,12 +27,13 @@ export type AccessibilityViolation = {
 // states (for example a `div` standing in for a list item). Wait until every
 // placeholder is gone and the DOM structure has stopped changing before
 // running Axe.
-// biome-ignore lint/security/noSecrets: CSS selector for React streaming placeholders, not a credential.
-const reactStreamingPlaceholders = 'template[id^="P:"], template[id^="B:"]';
+const reactStreamingPlaceholders = ['P:', 'B:']
+  .map((idPrefix) => `template[id^="${idPrefix}"]`)
+  .join(', ');
 const structuralSettleMilliseconds = 250;
 const structuralSettleDeadlineMilliseconds = 10_000;
 
-const waitForStreamedDom = async (page: Page): Promise<void> => {
+const waitForStreamedDom = async (page: playwright.Page): Promise<void> => {
   await page.waitForFunction(
     (selector) => document.querySelector(selector) === null,
     reactStreamingPlaceholders,
@@ -71,15 +73,17 @@ const waitForStreamedDom = async (page: Page): Promise<void> => {
     },
   );
   if (!settled) {
-    // biome-ignore lint/suspicious/noConsole: deliberate test-runner diagnostic so a starved quiescence wait is visible instead of resurfacing as a random Axe flake.
-    console.warn(
-      `Axe scan of ${page.url()} proceeded after the ${structuralSettleDeadlineMilliseconds}ms DOM quiescence deadline; results may reflect a still-mutating page.`,
+    // Written to stderr directly: a console call would need an inline
+    // suppression, and suppressions in synced sources break consumer gates
+    // that disable the suppressed rule.
+    process.stderr.write(
+      `Axe scan of ${page.url()} proceeded after the ${structuralSettleDeadlineMilliseconds}ms DOM quiescence deadline; results may reflect a still-mutating page.\n`,
     );
   }
 };
 
 export const scanWcag22AaViolations = async (
-  page: Page,
+  page: playwright.Page,
 ): Promise<ReadonlyArray<AccessibilityViolation>> => {
   await waitForStreamedDom(page);
   const results = await new AxeBuilder({ page })

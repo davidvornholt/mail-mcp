@@ -1,0 +1,185 @@
+name: Resolve SOPS secret
+description: Install pinned SOPS and export one validated secret value
+
+inputs:
+  age-key:
+    description: Age identity that can decrypt the secret file
+    required: false
+  secret-file:
+    description: SOPS-encrypted YAML file
+    required: true
+  secret-root:
+    description: Mapping from which secret-key resolves; ci or document
+    required: false
+    default: ci
+  secret-key:
+    description: Direct key or dotted path to resolve from the selected mapping
+    required: true
+  env-name:
+    description: Environment variable to export for later workflow steps
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve and validate secret
+      id: resolve
+      shell: bash
+      env:
+        SOPS_AGE_KEY: ${{ inputs.age-key }}
+        SOPS_SECRET_FILE: ${{ inputs.secret-file }}
+        SOPS_SECRET_ROOT: ${{ inputs.secret-root }}
+        SOPS_SECRET_KEY: ${{ inputs.secret-key }}
+        SOPS_ENV_NAME: ${{ inputs.env-name }}
+      run: |
+        set -euo pipefail
+
+        if [[ ! "$SOPS_ENV_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+          echo "::error::env-name must be a valid environment variable name"
+          exit 1
+        fi
+        case "$SOPS_SECRET_ROOT" in
+          ci) secret_path="ci.$SOPS_SECRET_KEY" ;;
+          document) secret_path="$SOPS_SECRET_KEY" ;;
+          *)
+            echo "::error::secret-root must be ci or document"
+            exit 1
+            ;;
+        esac
+
+        decrypted_file=$(mktemp "$RUNNER_TEMP/sops-secret-decrypted.XXXXXX")
+        value_file=$(mktemp "$RUNNER_TEMP/sops-secret-value.XXXXXX")
+        trap 'rm -f "$decrypted_file" "$value_file"' EXIT
+
+        reason=""
+        if [ -z "$SOPS_AGE_KEY" ]; then
+          reason="SOPS_AGE_KEY is not configured"
+        elif [ ! -f "$SOPS_SECRET_FILE" ]; then
+          reason="$SOPS_SECRET_FILE does not exist"
+        else
+          version=v3.13.2
+          case "$(uname -m)" in
+            x86_64) arch=amd64 sha=154dfe4cd70554bdd82b98e4cd4acf191d43d01ead6f00a73477aa44c4ac42ef ;;
+            aarch64) arch=arm64 sha=78abf2e15c86250a1553ae6f53aba96be6b2a8126f160b1534959add3467ad76 ;;
+            *) reason="No pinned SOPS binary for runner architecture $(uname -m)" ;;
+          esac
+          sops="$RUNNER_TEMP/sops"
+          if [ -z "$reason" ] && ! curl -sfLo "$sops" "https://github.com/getsops/sops/releases/download/${version}/sops-${version}.linux.${arch}"; then
+            rm -f "$sops"
+            reason="Downloading SOPS ${version} for linux/${arch} failed"
+          fi
+          if [ -z "$reason" ] && ! echo "$sha  $sops" | sha256sum --check --quiet; then
+            rm -f "$sops"
+            reason="Downloaded SOPS binary does not match the pinned checksum"
+          fi
+          if [ -z "$reason" ]; then
+            chmod +x "$sops"
+            if ! "$sops" decrypt --output-type json "$SOPS_SECRET_FILE" > "$decrypted_file"; then
+              reason="Decrypting $SOPS_SECRET_FILE with SOPS failed"
+            else
+              lookup_filter='
+                def descend($root; $path):
+                  reduce $path[] as $part (
+                    { found: true, value: $root };
+                    if .found and (.value | type) == "object" and (.value | has($part))
+                    then { found: true, value: .value[$part] }
+                    else { found: false, value: null }
+                    end
+                  );
+                def selected_root:
+                  if $secret_root == "ci" then .ci else . end;
+                def resolve:
+                  selected_root as $root
+                  | if ($root | type) != "object" then
+                    { status: "missing", value: null }
+                  else
+                    ($key | split(".")) as $path
+                    | ($root | has($key)) as $has_direct
+                    | descend($root; $path) as $nested
+                    | if ($path | length) > 1 and $has_direct and $nested.found then
+                        { status: "ambiguous", value: null }
+                      elif $has_direct then
+                        { status: "found", value: $root[$key] }
+                      elif $nested.found then
+                        { status: "found", value: $nested.value }
+                      else
+                        { status: "missing", value: null }
+                      end
+                    | if .status != "found" then .
+                      elif (.value | type) != "string" then .status = "non-string"
+                      elif .value == "" then .status = "empty"
+                      else .
+                      end
+                  end;
+                resolve
+              '
+              if ! lookup_status=$(jq -r --arg key "$SOPS_SECRET_KEY" --arg secret_root "$SOPS_SECRET_ROOT" "$lookup_filter | .status" "$decrypted_file"); then
+                reason="Resolving $secret_path from $SOPS_SECRET_FILE failed"
+              else
+                case "$lookup_status" in
+                  found)
+                    jq -j --arg key "$SOPS_SECRET_KEY" --arg secret_root "$SOPS_SECRET_ROOT" "$lookup_filter | .value" "$decrypted_file" > "$value_file"
+                    ;;
+                  missing)
+                    reason="$secret_path is missing in $SOPS_SECRET_FILE"
+                    ;;
+                  ambiguous)
+                    reason="$secret_path is ambiguous because both a direct key and nested path exist in $SOPS_SECRET_FILE"
+                    ;;
+                  non-string)
+                    reason="$secret_path is not a string in $SOPS_SECRET_FILE"
+                    ;;
+                  empty)
+                    reason="$secret_path is empty in $SOPS_SECRET_FILE"
+                    ;;
+                  *)
+                    reason="Resolving $secret_path from $SOPS_SECRET_FILE returned an unknown status"
+                    ;;
+                esac
+              fi
+            fi
+          fi
+        fi
+
+        # An unresolvable secret always fails the step. There is deliberately no
+        # mode that substitutes a default: a caller that degrades quietly turns
+        # a broken credential into a green run.
+        if [ -n "$reason" ]; then
+          echo "::error::$reason"
+          exit 1
+        fi
+        # Unreachable through the resolve statuses above, which reject an empty
+        # value with a precise message. Kept as a last guard on the GITHUB_ENV
+        # boundary so a future filter change cannot export an empty credential.
+        if [ ! -s "$value_file" ]; then
+          echo "::error::Resolved secret value must be non-empty"
+          exit 1
+        fi
+
+        line_break_count=$(LC_ALL=C tr -cd '\r\n' < "$value_file" | wc -c)
+        mask_value() {
+          local escaped_value=${1//'%'/'%25'}
+          escaped_value=${escaped_value//$'\r'/'%0D'}
+          printf '%s\n' "::add-mask::$escaped_value"
+        }
+        if [ "$line_break_count" -eq 0 ]; then
+          value=$(< "$value_file")
+          mask_value "$value"
+          printf '%s=%s\n' "$SOPS_ENV_NAME" "$value" >> "$GITHUB_ENV"
+        else
+          while IFS= read -r line || [ -n "$line" ]; do
+            if [ -n "$line" ]; then
+              mask_value "$line"
+            fi
+          done < "$value_file"
+
+          delimiter=SOPS_SECRET_EOF
+          delimiter_suffix=0
+          while grep -Fqx "$delimiter" "$value_file" || grep -Fqx "$delimiter"$'\r' "$value_file"; do
+            delimiter_suffix=$((delimiter_suffix + 1))
+            delimiter="SOPS_SECRET_EOF_$delimiter_suffix"
+          done
+          printf '%s<<%s\n' "$SOPS_ENV_NAME" "$delimiter" >> "$GITHUB_ENV"
+          cat "$value_file" >> "$GITHUB_ENV"
+          printf '\n%s\n' "$delimiter" >> "$GITHUB_ENV"
+        fi
