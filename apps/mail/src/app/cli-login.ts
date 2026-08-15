@@ -3,62 +3,90 @@ import type { MailError } from '../features/mail/errors/errors';
 import { Imap } from '../features/mail/services/imap';
 import { storeVerifiedPassword } from '../features/mail/services/login';
 import { Secrets } from '../features/mail/services/secrets';
-import { promptHidden } from '../shared/terminal';
+import {
+  type HiddenPromptResult,
+  promptHidden,
+} from '../shared/terminal';
 
 type LoginAttempt =
-  | { readonly ok: true; readonly message: string }
-  | { readonly ok: false; readonly message: string };
+  | { readonly _tag: 'success'; readonly message: string }
+  | { readonly _tag: 'skipped'; readonly message: string }
+  | { readonly _tag: 'cancelled'; readonly message: string }
+  | { readonly _tag: 'failed'; readonly message: string };
+
+type LoginResult = LoginAttempt & { readonly email: string };
+
+type HiddenPrompt = (question: string) => Effect.Effect<HiddenPromptResult>;
 
 const loginAccount = (
   email: string,
+  prompt: HiddenPrompt,
 ): Effect.Effect<LoginAttempt, MailError, Imap | Secrets> =>
   Effect.gen(function* () {
-    const password = yield* promptHidden(
+    const promptResult = yield* prompt(
       `Password for ${email} (input hidden): `,
     );
-    if (password === '') {
-      return { ok: false, message: 'empty password — skipped.' };
+    if (promptResult._tag === 'cancelled') {
+      return {
+        _tag: 'cancelled',
+        message: 'cancelled — remaining accounts skipped.',
+      } as const;
+    }
+    if (promptResult.value === '') {
+      return { _tag: 'skipped', message: 'empty password — skipped.' } as const;
     }
     const secrets = yield* Secrets;
     const imap = yield* Imap;
     yield* storeVerifiedPassword(
       email,
-      password,
+      promptResult.value,
       imap.verifyCredentials,
       secrets.setPassword,
     );
     return {
-      ok: true,
+      _tag: 'success',
       message:
         'verified and stored password in the OS keyring (service "mail-mcp").',
-    };
+    } as const;
   });
 
 export const loginCommand = (
   emails: ReadonlyArray<string>,
   flagFailure: Effect.Effect<void>,
+  prompt: HiddenPrompt = promptHidden,
 ): Effect.Effect<void, never, Imap | Secrets> =>
   Effect.gen(function* () {
-    const results = yield* Effect.forEach(
+    const results = yield* Effect.reduceWhile(
       emails,
-      (email) =>
-        loginAccount(email).pipe(
-          Effect.map((result) => ({ email, ...result })),
-          Effect.catchAll((error) =>
-            Effect.succeed({ email, ok: false, message: error.message }),
+      [] as ReadonlyArray<LoginResult>,
+      {
+        while: (previous) => previous.at(-1)?._tag !== 'cancelled',
+        body: (previous, email) =>
+          loginAccount(email, prompt).pipe(
+            Effect.map(
+              (result): ReadonlyArray<LoginResult> => [
+                ...previous,
+                { email, ...result },
+              ],
+            ),
+            Effect.catchAll((error) =>
+              Effect.succeed([
+                ...previous,
+                { email, _tag: 'failed', message: error.message } as const,
+              ]),
+            ),
           ),
-        ),
-      { concurrency: 1 },
+      },
     );
     yield* Effect.forEach(
       results,
       (result) =>
-        result.ok
+        result._tag === 'success'
           ? Console.log(`${result.email}: ${result.message}`)
           : Console.error(`${result.email}: ${result.message}`),
       { discard: true },
     );
-    if (results.some((result) => !result.ok)) {
+    if (results.some((result) => result._tag !== 'success')) {
       yield* flagFailure;
     }
   });
