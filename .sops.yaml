@@ -2,15 +2,15 @@
 # real age public keys (`just age-create` prints one), then encrypt
 # secrets/*.yaml. This file is seeded once and never synced.
 keys:
-  - &primary age1replacewithyourpersonalagerecipientpublickeyxxxxxxxxxxxxxxxxxx
-  - &ci age1replacewithyourgithubactionscirecipientpublickeyxxxxxxxxxxxxxxxxxxx
+  - &david-workstation age1gxzu2f027zu227f4wyf4jh5sw0w495482qfzv5flmfyjvgzxm3ys8p9muz
+  - &github_actions_ci age18dyr2z0nufldrexs62ch8dezj5ededy9hj4mf8qfrg3xlylxk4aqtf67g3
 creation_rules:
   - path_regex: secrets/dev\.yaml$
     key_groups:
       - age:
-          - *primary
+          - *david-workstation
   - path_regex: secrets/ci\.yaml$
     key_groups:
       - age:
-          - *primary
-          - *ci
+          - *david-workstation
+          - *github_actions_ci
