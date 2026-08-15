@@ -42,7 +42,9 @@ describe('loginCommand', () => {
       ),
     );
 
-    expect(prompts).toEqual(['Password for first@example.com (input hidden): ']);
+    expect(prompts).toEqual([
+      'Password for first@example.com (input hidden): ',
+    ]);
     expect(verified).toEqual([]);
     expect(stored).toEqual([]);
     expect(failureFlagged).toBeTrue();

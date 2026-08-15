@@ -3,10 +3,7 @@ import type { MailError } from '../features/mail/errors/errors';
 import { Imap } from '../features/mail/services/imap';
 import { storeVerifiedPassword } from '../features/mail/services/login';
 import { Secrets } from '../features/mail/services/secrets';
-import {
-  type HiddenPromptResult,
-  promptHidden,
-} from '../shared/terminal';
+import { type HiddenPromptResult, promptHidden } from '../shared/terminal';
 
 type LoginAttempt =
   | { readonly _tag: 'success'; readonly message: string }
