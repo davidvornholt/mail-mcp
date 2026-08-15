@@ -3,7 +3,7 @@ export const usage = (
 ): string => `mail — draft-only IMAP helper
 
 Commands:
-  mail login <email>                       verify and store password (hidden prompt)
+  mail login [email]                       verify and store password (hidden prompt); omit email for all accounts
   mail accounts                            list configured accounts
   mail status [email] [--quick]            check auth per account (--quick: keyring only)
   mail folders <email>                     list folders

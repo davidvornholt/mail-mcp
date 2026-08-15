@@ -4,6 +4,9 @@ const cliPath = Bun.fileURLToPath(new URL('./cli.ts', import.meta.url));
 const fixturePath = Bun.fileURLToPath(
   new URL('../features/mail/services/accounts.fixture.toml', import.meta.url),
 );
+const loginFixturePath = Bun.fileURLToPath(
+  new URL('./accounts-login.fixture.toml', import.meta.url),
+);
 
 type CliResult = {
   readonly exitCode: number;
@@ -99,6 +102,17 @@ describe('cli exit codes', () => {
       const result = runCli([], fixturePath);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('mail — draft-only IMAP helper');
+    },
+    subprocessTimeoutMs,
+  );
+
+  it(
+    'login without an account prompts through every configured account',
+    () => {
+      const result = runCli(['login'], loginFixturePath);
+      expect(result.exitCode).toBe(1);
+      expect(result.stderr).toContain('first@example.com: empty password');
+      expect(result.stderr).toContain('second@example.com: empty password');
     },
     subprocessTimeoutMs,
   );
