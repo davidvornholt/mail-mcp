@@ -3,15 +3,14 @@ name: Standards sync
 # Closes the one gap `standards check` cannot: it detects local tampering, not that
 # UPSTREAM moved on. This runs `sync` on a cadence and opens a PR when the
 # mirror actually changes, so a repo learns about new standards without anyone
-# remembering to pull. Synced from davidvornholt/standards; in the standards
-# repo itself it is a harmless no-op (nothing upstream of the source).
+# remembering to pull. Synced from davidvornholt/standards; the standards
+# source repository opts out through its repo-owned sync policy.
 #
 # Cadence and pinning are repo policy, not canonical content, so they live in
 # the consumer-owned sync-standards.local.json next to this (read-only) file,
 # versioned and reviewable like any other configuration. All fields optional:
-#   { "autoSync": false }  skip the weekly scheduled run; manual
-#                          workflow_dispatch still works and stays the
-#                          sanctioned way to sync deliberately.
+#   { "autoSync": false }  skip the weekly scheduled run; use the local CLI
+#                          when you want to sync deliberately.
 #   { "ref": "v0.7.0" }    tag, branch, or full commit sha to sync from
 #                          instead of main. The CLI reads the same file, so a
 #                          local `bun standards sync` obeys the same pin.
@@ -19,30 +18,32 @@ name: Standards sync
 on:
   schedule:
     - cron: "0 6 * * 1" # Mondays 06:00 UTC
-  workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 concurrency:
   group: standards-sync
   cancel-in-progress: false
 
+# A sole-maintainer personal repository may route every compatible canonical
+# job through its permissionless CodeBuild project. GitHub supplies this trusted
+# workflow's existing secrets and token permissions to that ephemeral runner.
 jobs:
   # Cheap preflight: job-level `if:` expressions cannot read repository files,
   # so this job surfaces the checked-in policy for the gate below. A missing
   # file means the defaults (auto-sync on); an unparseable one fails this job
   # loudly — and with it the gated sync — rather than guessing a default.
   policy:
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_CODEBUILD_PROJECT != '' && format('codebuild-{0}-{1}-{2}-small', vars.CI_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
+    timeout-minutes: 30
     outputs:
       auto-sync: ${{ steps.read.outputs.auto-sync }}
       present: ${{ steps.read.outputs.present }}
       ref: ${{ steps.read.outputs.ref }}
     steps:
       - name: Checkout policy file
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           sparse-checkout: sync-standards.local.json
           sparse-checkout-cone-mode: false
@@ -84,13 +85,14 @@ jobs:
 
   sync:
     needs: policy
-    # Manual dispatch always runs — it is a deliberate act; only the scheduled
-    # cadence is gated on the checked-in opt-out.
-    if: github.event_name == 'workflow_dispatch' || needs.policy.outputs.auto-sync != 'false'
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    if: needs.policy.outputs.auto-sync != 'false'
+    runs-on: ${{ vars.CI_CODEBUILD_PROJECT != '' && format('codebuild-{0}-{1}-{2}-small', vars.CI_CODEBUILD_PROJECT, github.run_id, github.run_attempt) || 'ubuntu-latest' }}
+    timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -101,12 +103,12 @@ jobs:
         run: bun install --frozen-lockfile
 
       # A consumer can receive this canonical workflow before upgrading its
-      # repo-owned package manifest. Fail before sync when a policy-aware CLI
-      # is required instead of silently letting an older CLI ignore the file.
-      - name: Require policy-aware standards CLI
-        if: needs.policy.outputs.present == 'true'
+      # repo-owned package manifest. Fail before sync instead of letting an
+      # older CLI mirror canonical files without enforcing their lock-backed
+      # managed-file contract.
+      - name: Require compatible standards CLI
         env:
-          MINIMUM_STANDARDS_VERSION: "0.7.0"
+          MINIMUM_STANDARDS_VERSION: "0.21.0"
         run: |
           package_path=node_modules/@davidvornholt/standards/package.json
           installed_version=$(jq -er '.version | select(type == "string")' "$package_path")
@@ -116,13 +118,68 @@ jobs:
           fi
           lowest_version=$(printf '%s\n%s\n' "$MINIMUM_STANDARDS_VERSION" "$installed_version" | sort -V | head -n 1)
           if [ "$lowest_version" != "$MINIMUM_STANDARDS_VERSION" ]; then
-            echo "::error::sync-standards.local.json requires @davidvornholt/standards >= $MINIMUM_STANDARDS_VERSION; upgrade package.json and bun.lock before accepting this workflow"
+            echo "::error::Canonical managed-file checks require @davidvornholt/standards >= $MINIMUM_STANDARDS_VERSION; upgrade package.json and bun.lock before accepting this workflow"
             exit 1
           fi
 
+      # Resolve through the action from the trusted pre-sync checkout. Sync
+      # replaces managed files, including this action, so no local action may
+      # execute after the mirror changes.
+      - name: Resolve broker App ID
+        uses: ./.github/actions/sops-secret
+        with:
+          age-key: ${{ secrets.SOPS_AGE_KEY }}
+          secret-file: secrets/ci.yaml
+          secret-key: broker_app.app_id
+          env-name: BROKER_APP_ID
+
+      - name: Resolve broker App private key
+        uses: ./.github/actions/sops-secret
+        with:
+          age-key: ${{ secrets.SOPS_AGE_KEY }}
+          secret-file: secrets/ci.yaml
+          secret-key: broker_app.private_key
+          env-name: BROKER_APP_PRIVATE_KEY
+
+      # Mint both tokens before sync as a cheap, fail-closed permission check,
+      # but expose them only to the post-sync operation that needs each one.
+      # The writer needs GitHub's separate Workflows grant because canonical
+      # files include .github/workflows/**; Contents write alone cannot push
+      # those files.
+      - name: Mint current-repository branch writer token
+        id: branch-writer-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ env.BROKER_APP_ID }}
+          private-key: ${{ env.BROKER_APP_PRIVATE_KEY }}
+          # Omitting owner and repositories is the action's exact
+          # current-repository scope; never derive either from event payload.
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Mint current-repository PR token
+        id: pr-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ env.BROKER_APP_ID }}
+          private-key: ${{ env.BROKER_APP_PRIVATE_KEY }}
+          # Omitting owner and repositories is the action's exact
+          # current-repository scope; never derive either from event payload.
+          permission-contents: read
+          permission-pull-requests: write
+
+      - name: Clear broker App credentials
+        run: |
+          {
+            echo "BROKER_APP_ID="
+            echo "BROKER_APP_PRIVATE_KEY="
+          } >> "$GITHUB_ENV"
+
       # Forward the validated policy pin explicitly as a second fail-closed
       # boundary. The CLI also reads and validates the same document, so local
-      # init/sync commands and this workflow retain one policy owner.
+      # init/sync commands and this workflow retain one policy owner. The
+      # broker tokens are action outputs, not ambient variables, so the sync
+      # engine and fetched canonical content never receive them.
       - name: Sync canonical files from upstream
         env:
           SYNC_POLICY_REF: ${{ needs.policy.outputs.ref }}
@@ -133,6 +190,22 @@ jobs:
             bun standards sync
           fi
 
+      - name: Detect mirror changes
+        id: mirror
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Already in sync with upstream standards; nothing to open."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # The branch-writer and PR-opening tokens are short-lived installation
+      # tokens for only this repository. Their App credentials come from
+      # ci.broker_app in the SOPS-encrypted secrets/ci.yaml, resolved through
+      # the trusted pre-sync action. Missing credentials, an unapproved App
+      # permission update, or failed token minting stops the job.
+
       # This workflow deliberately runs no inline `bun run check`: the synced
       # result is validated by the required Standards gate on the PR it opens,
       # like any other change. An inline gate would duplicate the gate's
@@ -141,30 +214,33 @@ jobs:
       # consumer most needs to be visible — an open PR with a red required
       # check is the signal, and branch protection keeps it unmergeable.
       #
-      # Configure STANDARDS_SYNC_TOKEN (fine-grained PAT: contents + pull
-      # requests write) so the opened PR triggers workflows; PRs opened with
-      # the default GITHUB_TOKEN fallback do not, and need a manual nudge
-      # (push to the branch or close and reopen) to run the gate.
-      #
-      # `gh pr create` is left to default `--base` to the repository's default
-      # branch: the `schedule` event carries no payload, so expressions like
-      # `github.event.repository.default_branch` are empty here.
-      - name: Open a pull request if the mirror changed
+      - name: Commit and push mirror changes
+        id: sync-branch
+        if: steps.mirror.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ secrets.STANDARDS_SYNC_TOKEN || secrets.GITHUB_TOKEN }}
+          BRANCH_WRITER_TOKEN: ${{ steps.branch-writer-token.outputs.token }}
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
-            echo "Already in sync with upstream standards; nothing to open."
-            exit 0
-          fi
           branch="standards-sync/$(date -u +%Y%m%d%H%M%S)"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local credential.helper "!f() { echo username=x-access-token; echo \"password=\$BRANCH_WRITER_TOKEN\"; }; f"
           git switch -c "$branch"
           git add -A
           git commit -m "chore: sync standards from upstream"
           git push --set-upstream origin "$branch"
+          git config --unset credential.helper
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+
+      # `gh pr create` is left to default `--base` to the repository's default
+      # branch: the `schedule` event carries no payload, so expressions like
+      # `github.event.repository.default_branch` are empty here. Only the
+      # non-secret branch name crosses from the writer-token process.
+      - name: Open a pull request if the mirror changed
+        if: steps.mirror.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.pr-token.outputs.token }}
+        run: |
           gh pr create \
-            --head "$branch" \
+            --head "${{ steps.sync-branch.outputs.branch }}" \
             --title "chore: sync standards from upstream" \
-            --body "Automated sync from davidvornholt/standards. These are canonical (read-only) files; review the changes and merge to adopt them. Generated by the \`Standards sync\` workflow."
+            --body "Automated sync from davidvornholt/standards. These are canonical (read-only) files. Before merging, check out this sync branch; remove \`allow_merge_commit\`, \`allow_rebase_merge\`, and \`allow_squash_merge\` from \`.github/settings.local.json\` if that repo-owned seam still declares them; run \`bun standards github --apply\` with admin auth; push any seam cleanup; and wait for or rerun the GitHub settings gate. Merge only after every required check passes. Generated by the \`Standards sync\` workflow."
