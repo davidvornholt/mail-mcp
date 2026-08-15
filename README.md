@@ -30,10 +30,10 @@ bun link --cwd apps/mail
 cp apps/mail/accounts.example.toml apps/mail/accounts.toml
 # …edit apps/mail/accounts.toml…
 
-# verify each account's password against IMAP, then store it in the OS keyring
-# (hidden prompt — nothing is echoed or written to disk). Run this yourself;
-# the secret never leaves your machine.
-mail login you@example.com
+# verify every account's password against IMAP, then store each in the OS keyring
+# (hidden prompts — nothing is echoed or written to disk). Run this yourself;
+# the secrets never leave your machine.
+mail login
 
 # confirm each account authenticates cleanly (or shows what still needs a login)
 mail status

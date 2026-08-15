@@ -4,12 +4,11 @@ import { Console, Effect } from 'effect';
 import type { MailError } from '../features/mail/errors/errors';
 import { MailConfig } from '../features/mail/services/config';
 import { Imap } from '../features/mail/services/imap';
-import { storeVerifiedPassword } from '../features/mail/services/login';
-import { Secrets } from '../features/mail/services/secrets';
+import type { Secrets } from '../features/mail/services/secrets';
 import { checkAccounts } from '../features/mail/services/status';
 import { at, parseFlags } from '../shared/args';
-import { promptHidden } from '../shared/terminal';
 import { parseMessageHandle, parseSearchArgs } from './cli-args';
+import { loginCommand } from './cli-login';
 import { foldersCommand, searchCommand } from './cli-mail-commands';
 import { usage } from './cli-usage';
 import { appLayer } from './runtime';
@@ -31,30 +30,6 @@ const fail = (message: string): Effect.Effect<void> =>
 
 const badAccount = (known: ReadonlyArray<string>): Effect.Effect<void> =>
   fail(`Unknown or missing account. Known: ${known.join(', ')}`);
-
-const loginCommand = (
-  email: string,
-): Effect.Effect<void, MailError, Imap | Secrets> =>
-  Effect.gen(function* () {
-    const password = yield* promptHidden(
-      `Password for ${email} (input hidden): `,
-    );
-    if (password === '') {
-      yield* fail('Empty password — aborted.');
-      return;
-    }
-    const secrets = yield* Secrets;
-    const imap = yield* Imap;
-    yield* storeVerifiedPassword(
-      email,
-      password,
-      imap.verifyCredentials,
-      secrets.setPassword,
-    );
-    yield* Console.log(
-      `Verified and stored password for ${email} in the OS keyring (service "mail-mcp").`,
-    );
-  });
 
 const readCommand = (
   email: string,
@@ -153,8 +128,16 @@ const program: Effect.Effect<void, MailError, Env> = Effect.gen(function* () {
       const only = rest.find((token) => !token.startsWith('--'));
       return yield* statusCommand(only, rest.includes('--quick'));
     }
-    case 'login':
-      return yield* withAccount(account, loginCommand);
+    case 'login': {
+      const config = yield* MailConfig;
+      if (account !== undefined && !config.emails.includes(account)) {
+        return yield* badAccount(config.emails);
+      }
+      return yield* loginCommand(
+        account === undefined ? config.emails : [account],
+        flagFailure,
+      );
+    }
     case 'folders':
       return yield* withAccount(account, foldersCommand);
     case 'search': {

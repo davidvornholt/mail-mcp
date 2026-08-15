@@ -12,7 +12,7 @@ Every draft is saved with both a plain-text body and an HTML alternative: the HT
 ## Commands
 
 ```bash
-mail login <email>                     # verify and store a password in the OS keyring
+mail login [email]                     # verify and store a password; omit email for all accounts
 mail accounts                          # list configured accounts
 mail status [email] [--quick]          # check auth per account (--quick: keyring only, no connect)
                                        # exits non-zero if any checked account fails
@@ -43,6 +43,6 @@ Non-secret account configuration lives in `accounts.toml` (email, display name, 
 
 ## Secrets
 
-This workspace consumes **one secret per account: the IMAP password**. It is **not** stored in the repo, in SOPS, or in any file — it lives in the **OS keyring** (Secret Service / gnome-keyring on Linux) under the service name `mail-mcp`, keyed by the account email. Store it with `mail login <email>`, which reads it from a hidden prompt, verifies it against the account's IMAP server, and writes it to the keyring only after successful authentication; the server and CLI read it back at runtime via `@napi-rs/keyring`.
+This workspace consumes **one secret per account: the IMAP password**. It is **not** stored in the repo, in SOPS, or in any file — it lives in the **OS keyring** (Secret Service / gnome-keyring on Linux) under the service name `mail-mcp`, keyed by the account email. Store it with `mail login <email>`, or run `mail login` to work through every configured account in sequence. Each password is read from a hidden prompt, verified against that account's IMAP server, and written to the keyring only after successful authentication; the server and CLI read it back at runtime via `@napi-rs/keyring`.
 
 A Secret Service provider must be running and unlocked in the session where the server or CLI runs.
