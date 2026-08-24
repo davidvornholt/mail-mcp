@@ -10,15 +10,17 @@ const requireSupportedTag = (
   client: ImapFlow,
   folder: string,
   tagKey: string,
-): Effect.Effect<void, DraftError> => {
+): Effect.Effect<string, DraftError> => {
   const permanentFlags =
     client.mailbox === false ? undefined : client.mailbox.permanentFlags;
-  if (
-    permanentFlags === undefined ||
-    permanentFlags.has('\\*') ||
-    permanentFlags.has(tagKey)
-  ) {
-    return Effect.void;
+  if (permanentFlags === undefined || permanentFlags.has('\\*')) {
+    return Effect.succeed(tagKey);
+  }
+  const advertisedTag = [...permanentFlags].find(
+    (flag) => flag.toLowerCase() === tagKey.toLowerCase(),
+  );
+  if (advertisedTag !== undefined) {
+    return Effect.succeed(advertisedTag);
   }
   return Effect.fail(
     new DraftError({
@@ -51,6 +53,72 @@ const requireAllDrafts = (
     }
   });
 
+const requireAllTagged = (
+  client: ImapFlow,
+  folder: string,
+  uids: ReadonlyArray<number>,
+  tagKey: string,
+): Effect.Effect<void, ImapError> =>
+  Effect.gen(function* () {
+    const messages = yield* Effect.tryPromise({
+      try: () =>
+        client.fetchAll([...uids], { uid: true, flags: true }, { uid: true }),
+      catch: (cause) =>
+        new ImapError({
+          message: `verify tagged drafts in "${folder}" failed: ${String(cause)}`,
+        }),
+    });
+    const byUid = new Map(messages.map((message) => [message.uid, message]));
+    const missing = uids.filter((uid) => !byUid.has(uid));
+    const untagged = uids.filter((uid) => {
+      const message = byUid.get(uid);
+      return (
+        message !== undefined &&
+        ![...(message.flags ?? [])].some(
+          (flag) => flag.toLowerCase() === tagKey.toLowerCase(),
+        )
+      );
+    });
+    if (missing.length === 0 && untagged.length === 0) {
+      return;
+    }
+    const details = [
+      missing.length > 0 ? `missing uids ${missing.join(', ')}` : undefined,
+      untagged.length > 0
+        ? `tag absent from uids ${untagged.join(', ')}`
+        : undefined,
+    ].filter((detail): detail is string => detail !== undefined);
+    return yield* Effect.fail(
+      new ImapError({
+        message: `tag drafts in "${folder}" was incomplete after the server update: ${details.join('; ')}`,
+      }),
+    );
+  });
+
+type DraftHandle = TagDraftsInput['drafts'][number];
+
+const requireOneUidValidity = (
+  drafts: ReadonlyArray<DraftHandle>,
+): Effect.Effect<DraftHandle, DraftError> => {
+  const [firstDraft] = drafts;
+  if (firstDraft === undefined) {
+    return Effect.fail(
+      new DraftError({ message: 'at least one draft handle is required' }),
+    );
+  }
+  if (
+    drafts.some(({ uidValidity }) => uidValidity !== firstDraft.uidValidity)
+  ) {
+    return Effect.fail(
+      new DraftError({
+        message:
+          'refusing to tag drafts with mixed uidValidity handles; search the drafts folder again',
+      }),
+    );
+  }
+  return Effect.succeed(firstDraft);
+};
+
 const requireCurrentUidValidity = (
   client: ImapFlow,
   folder: string,
@@ -76,27 +144,30 @@ export const tagDrafts = (
   input: Omit<TagDraftsInput, 'account'>,
 ): Effect.Effect<TagDraftsResult, DraftError | ImapError | StaleUidError> =>
   Effect.gen(function* () {
-    const { folder, uids, uidValidity, tagKey } = input;
+    const { folder, drafts, tagKey } = input;
+    const firstDraft = yield* requireOneUidValidity(drafts);
     const folders = yield* listFolders(client);
     const draftsFolder = yield* requireDraftsFolder(folders, folder);
-    const uniqueUids = [...new Set(uids)];
-    const [firstUid] = uniqueUids;
-    if (firstUid === undefined) {
-      return yield* Effect.fail(
-        new DraftError({ message: 'at least one draft uid is required' }),
-      );
-    }
+    const uniqueDrafts = [
+      ...new Map(drafts.map((draft) => [draft.uid, draft])).values(),
+    ];
+    const uniqueUids = uniqueDrafts.map(({ uid }) => uid);
     yield* lockMailbox(client, draftsFolder);
     yield* requireCurrentUidValidity(
       client,
       draftsFolder,
-      firstUid,
-      uidValidity,
+      firstDraft.uid,
+      firstDraft.uidValidity,
     );
-    yield* requireSupportedTag(client, draftsFolder, tagKey);
+    const storedTagKey = yield* requireSupportedTag(
+      client,
+      draftsFolder,
+      tagKey,
+    );
     yield* requireAllDrafts(client, draftsFolder, uniqueUids);
     const updated = yield* Effect.tryPromise({
-      try: () => client.messageFlagsAdd(uniqueUids, [tagKey], { uid: true }),
+      try: () =>
+        client.messageFlagsAdd(uniqueUids, [storedTagKey], { uid: true }),
       catch: (cause) =>
         new ImapError({
           message: `tag drafts in "${draftsFolder}" failed: ${String(cause)}`,
@@ -109,10 +180,11 @@ export const tagDrafts = (
         }),
       );
     }
+    yield* requireAllTagged(client, draftsFolder, uniqueUids, storedTagKey);
     return {
       folder: draftsFolder,
-      uids: uniqueUids,
-      tagKey,
+      drafts: uniqueDrafts,
+      tagKey: storedTagKey,
       tagged: uniqueUids.length,
     };
   }).pipe(Effect.scoped);

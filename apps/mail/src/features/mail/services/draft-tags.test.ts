@@ -1,69 +1,35 @@
 import { describe, expect, it } from 'bun:test';
 import { Effect } from 'effect';
-import type { ImapFlow } from 'imapflow';
 import { tagDrafts } from './draft-tags';
+import {
+  draftsFolder,
+  existingUid,
+  fakeClient,
+  handle,
+  missingUid,
+  reindexedUidValidity,
+  secondUid,
+  tagKey,
+} from './draft-tags.test-support';
 
-const draftFolders = [
-  { path: 'INBOX', name: 'INBOX', specialUse: null, subscribed: true },
-  { path: 'Drafts', name: 'Drafts', specialUse: '\\Drafts', subscribed: true },
-];
-const draftsFolder = 'Drafts';
-const tagKey = '$label1';
-const existingUid = 7;
-const missingUid = 8;
-const secondUid = 9;
-const expectedUidValidity = '111';
-const defaultUidValidity = 111n;
-const reindexedUidValidity = 222n;
-
-type ClientOptions = {
-  readonly found?: ReadonlyArray<number>;
-  readonly permanentFlags?: ReadonlyArray<string>;
-  readonly updateResult?: boolean;
-  readonly uidValidity?: bigint;
-};
-
-const fakeClient = (
-  events: Array<string>,
-  options: ClientOptions = {},
-): ImapFlow =>
-  ({
-    list: () => Promise.resolve(draftFolders),
-    getMailboxLock: () => Promise.resolve({ release: () => undefined }),
-    mailbox: {
-      permanentFlags: new Set(options.permanentFlags ?? ['\\*']),
-      uidValidity: options.uidValidity ?? defaultUidValidity,
-    },
-    fetchAll: (uids: ReadonlyArray<number>) =>
-      Promise.resolve((options.found ?? uids).map((uid) => ({ uid }))),
-    messageFlagsAdd: (
-      uids: ReadonlyArray<number>,
-      tags: ReadonlyArray<string>,
-    ) => {
-      events.push(`tag:${uids.join(',')}:${tags.join(',')}`);
-      return Promise.resolve(options.updateResult ?? true);
-    },
-  }) as unknown as ImapFlow;
-
-describe('tagDrafts', () => {
+describe('tagDrafts validation', () => {
   it('validates and tags all unique draft uids in one update', async () => {
     const events: Array<string> = [];
     const result = await Effect.runPromise(
       tagDrafts(fakeClient(events), {
         folder: draftsFolder,
-        uids: [existingUid, secondUid, existingUid],
-        uidValidity: expectedUidValidity,
+        drafts: [handle(existingUid), handle(secondUid), handle(existingUid)],
         tagKey,
       }),
     );
 
     expect(events).toEqual([`tag:${existingUid},${secondUid}:${tagKey}`]);
-    const taggedUids = [existingUid, secondUid];
+    const taggedDrafts = [handle(existingUid), handle(secondUid)];
     expect(result).toEqual({
       folder: draftsFolder,
-      uids: taggedUids,
+      drafts: taggedDrafts,
       tagKey,
-      tagged: taggedUids.length,
+      tagged: taggedDrafts.length,
     });
   });
 
@@ -71,10 +37,9 @@ describe('tagDrafts', () => {
     const events: Array<string> = [];
     const error = await Effect.runPromise(
       Effect.flip(
-        tagDrafts(fakeClient(events, { found: [existingUid] }), {
+        tagDrafts(fakeClient(events, { foundBeforeUpdate: [existingUid] }), {
           folder: draftsFolder,
-          uids: [existingUid, missingUid, secondUid],
-          uidValidity: expectedUidValidity,
+          drafts: [handle(existingUid), handle(missingUid), handle(secondUid)],
           tagKey,
         }),
       ),
@@ -93,8 +58,7 @@ describe('tagDrafts', () => {
           fakeClient(events, { permanentFlags: ['\\Seen', '$label2'] }),
           {
             folder: draftsFolder,
-            uids: [existingUid],
-            uidValidity: expectedUidValidity,
+            drafts: [handle(existingUid)],
             tagKey,
           },
         ),
@@ -106,13 +70,28 @@ describe('tagDrafts', () => {
     expect(events).toEqual([]);
   });
 
+  it('uses the case-insensitive spelling advertised by the server', async () => {
+    const events: Array<string> = [];
+    const result = await Effect.runPromise(
+      tagDrafts(fakeClient(events, { permanentFlags: ['$LABEL1'] }), {
+        folder: draftsFolder,
+        drafts: [handle(existingUid)],
+        tagKey: '$label1',
+      }),
+    );
+
+    expect(events).toEqual([`tag:${existingUid}:$LABEL1`]);
+    expect(result.tagKey).toBe('$LABEL1');
+  });
+});
+
+describe('tagDrafts completion', () => {
   it('reports when the server rejects the flag update', async () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient([], { updateResult: false }), {
           folder: draftsFolder,
-          uids: [existingUid],
-          uidValidity: expectedUidValidity,
+          drafts: [handle(existingUid)],
           tagKey,
         }),
       ),
@@ -127,8 +106,7 @@ describe('tagDrafts', () => {
       Effect.flip(
         tagDrafts(fakeClient([]), {
           folder: 'INBOX',
-          uids: [existingUid],
-          uidValidity: expectedUidValidity,
+          drafts: [handle(existingUid)],
           tagKey,
         }),
       ),
@@ -143,8 +121,7 @@ describe('tagDrafts', () => {
       Effect.flip(
         tagDrafts(fakeClient(events, { uidValidity: reindexedUidValidity }), {
           folder: draftsFolder,
-          uids: [existingUid, secondUid],
-          uidValidity: expectedUidValidity,
+          drafts: [handle(existingUid), handle(secondUid)],
           tagKey,
         }),
       ),
@@ -153,5 +130,54 @@ describe('tagDrafts', () => {
     expect(error._tag).toBe('StaleUidError');
     expect(error.message).toContain('was reindexed');
     expect(events).toEqual([]);
+  });
+
+  it('rejects handles from different mailbox generations before STORE', async () => {
+    const events: Array<string> = [];
+    const error = await Effect.runPromise(
+      Effect.flip(
+        tagDrafts(fakeClient(events, { uidValidity: reindexedUidValidity }), {
+          folder: draftsFolder,
+          drafts: [handle(existingUid), handle(secondUid, '222')],
+          tagKey,
+        }),
+      ),
+    );
+
+    expect(error._tag).toBe('DraftError');
+    expect(error.message).toContain('mixed uidValidity handles');
+    expect(events).toEqual([]);
+  });
+
+  it('never reports full success when a draft disappears during STORE', async () => {
+    const events: Array<string> = [];
+    const error = await Effect.runPromise(
+      Effect.flip(
+        tagDrafts(fakeClient(events, { foundAfterUpdate: [existingUid] }), {
+          folder: draftsFolder,
+          drafts: [handle(existingUid), handle(secondUid)],
+          tagKey,
+        }),
+      ),
+    );
+
+    expect(error._tag).toBe('ImapError');
+    expect(error.message).toContain(`missing uids ${secondUid}`);
+    expect(events).toEqual([`tag:${existingUid},${secondUid}:${tagKey}`]);
+  });
+
+  it('never reports success when STORE omits the requested tag', async () => {
+    const error = await Effect.runPromise(
+      Effect.flip(
+        tagDrafts(fakeClient([], { flagsAfterUpdate: [] }), {
+          folder: draftsFolder,
+          drafts: [handle(existingUid)],
+          tagKey,
+        }),
+      ),
+    );
+
+    expect(error._tag).toBe('ImapError');
+    expect(error.message).toContain(`tag absent from uids ${existingUid}`);
   });
 });

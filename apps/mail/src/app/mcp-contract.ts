@@ -138,14 +138,25 @@ export const deleteDraftFields = {
   ...draftLocationFields,
 } as const;
 
+// IMAP keywords use the visible ASCII atom grammar. Action-bearing keyword
+// policy is separate; broadening this grammar must not admit system flags.
+const imapKeywordPattern =
+  /^(?!.*[\u0022\u0025\u0028-\u002a\u005c\u005d\u007b])[\u0021-\u007e]+$/u;
+
 export const tagDraftsFields = {
   account: z.string(),
   folder: z.string(),
-  uids: z.array(z.number().int().positive()).min(1),
-  uidValidity: z.string(),
+  drafts: z
+    .array(
+      z.object({
+        uid: z.number().int().positive(),
+        uidValidity: z.string(),
+      }),
+    )
+    .min(1),
   tagKey: z
     .string()
-    .regex(/^[A-Za-z0-9_$=.-]+$/u)
+    .regex(imapKeywordPattern)
     .describe(
       'Thunderbird tag key or IMAP keyword, such as $label1 or welle=201.',
     ),

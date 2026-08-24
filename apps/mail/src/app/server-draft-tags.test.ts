@@ -16,14 +16,20 @@ it(
     expect(
       tools.find((tool) => tool.name === 'tag_drafts')?.inputSchema,
     ).toMatchObject({
-      required: ['account', 'folder', 'uids', 'uidValidity', 'tagKey'],
+      required: ['account', 'folder', 'drafts', 'tagKey'],
       properties: {
-        uids: {
+        drafts: {
           type: 'array',
           minItems: 1,
-          items: { type: 'integer', exclusiveMinimum: 0 },
+          items: {
+            type: 'object',
+            required: ['uid', 'uidValidity'],
+            properties: {
+              uid: { type: 'integer', exclusiveMinimum: 0 },
+              uidValidity: { type: 'string' },
+            },
+          },
         },
-        uidValidity: { type: 'string' },
         tagKey: { type: 'string', pattern: expect.any(String) },
       },
     });
@@ -31,18 +37,17 @@ it(
   subprocessTimeoutMs,
 );
 
-it(
-  'accepts Thunderbird custom tag keys containing equals signs',
-  async () => {
+it.each(['campaign+eu', 'campaign/eu', 'launch=20+=20europe'])(
+  'accepts the valid Thunderbird custom tag key %s',
+  async (tagKey) => {
     const client = await connectClient();
     const result = await client.callTool({
       name: 'tag_drafts',
       arguments: {
         account: 'unknown@example.com',
         folder: 'Drafts',
-        uids: [1],
-        uidValidity: '111',
-        tagKey: 'welle=201',
+        drafts: [{ uid: 1, uidValidity: '111' }],
+        tagKey,
       },
     });
 
