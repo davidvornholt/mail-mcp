@@ -31,6 +31,7 @@ export type SearchOptionsInput = SearchCriteria & {
 export type SearchHit = {
   readonly account: string;
   readonly uid: number;
+  readonly uidValidity: string;
   readonly folder: string;
   readonly from: string;
   readonly to: string;
@@ -118,6 +119,24 @@ export type UpdateDraftInput = DraftInput & {
   readonly folder: string;
   readonly uid: number;
   readonly uidValidity?: string;
+};
+
+export type DraftTagHandle = {
+  readonly account: string;
+  readonly folder: string;
+  readonly uid: number;
+  readonly uidValidity: string;
+};
+
+export type TagDraftsInput = {
+  readonly drafts: ReadonlyArray<DraftTagHandle>;
+  readonly tagKey: string;
+};
+
+export type TagDraftsResult = {
+  readonly drafts: ReadonlyArray<DraftTagHandle>;
+  readonly tagKey: string;
+  readonly tagged: number;
 };
 
 export const defaultSearchLimit = 20;

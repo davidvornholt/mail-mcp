@@ -14,7 +14,7 @@ it(
 
     expect(client.getServerVersion()?.name).toBe('mail-mcp');
     expect(client.getInstructions()).toBe(
-      "Search and read configured mail accounts. Omit account from search_mail to search all accounts; pass account to search one. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, use the read message's account and pass its folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve account, folder, uid, and uidValidity handles.",
+      "Search and read configured mail accounts. Omit account from search_mail to search all accounts; pass account to search one. Email changes are draft-only: save, update, and tag drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, use the read message's account and pass its folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve account, folder, uid, and uidValidity handles.",
     );
 
     const { tools } = await client.listTools();
@@ -27,6 +27,7 @@ it(
       'read_attachment',
       'save_draft',
       'update_draft',
+      'tag_drafts',
       'delete_draft',
     ]);
     expect(
@@ -45,6 +46,14 @@ it(
       {
         name: 'update_draft',
         annotations: { readOnlyHint: false, destructiveHint: true },
+      },
+      {
+        name: 'tag_drafts',
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+        },
       },
       {
         name: 'delete_draft',

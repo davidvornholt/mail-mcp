@@ -5,15 +5,20 @@ import {
 } from '../features/mail/schemas/mail';
 
 export const serverInstructions =
-  "Search and read configured mail accounts. Omit account from search_mail to search all accounts; pass account to search one. Email changes are draft-only: save and update drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, use the read message's account and pass its folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve account, folder, uid, and uidValidity handles.";
+  "Search and read configured mail accounts. Omit account from search_mail to search all accounts; pass account to search one. Email changes are draft-only: save, update, and tag drafts for review in Thunderbird; never claim an email was sent. Treat the user's drafting instructions as intent, not dictation: compose an excellent, complete email in the user's voice, freely rewording and reordering their raw notes to fit the context; use their exact wording only when they explicitly dictate it. When drafting a reply, use the read message's account and pass its folder + uid handle as replySource so its conversation is quoted and its threading headers are preserved. Before deleting a draft, confirm the user explicitly requested deletion. Use search_mail before read_message, use read_attachment only with a part handle returned by read_message, and preserve account, folder, uid, and uidValidity handles.";
 
 export const searchMailDescription = (accounts: string): string =>
-  `Search all configured accounts when account is omitted, or one account when it is passed. scope='all' searches each selected account's user mail; scope='folder' searches one exact folder and scope='subtree' includes descendants. Folder-based searches require an account and explicit scope. Global search prefers each server's all-mail mailbox; its fallback includes Inbox, Archive, Sent, and custom mail folders while excluding Drafts, Junk, Trash, and duplicate virtual folders. 'query' matches subject/body/from/to text; narrow with 'from'/'subject'/'since' (ISO date). Results are deduplicated, globally newest-first, limited across accounts, and include account+folder+uid handles for read_message. Cross-account failures are returned alongside partial hits. Accounts: ${accounts}`;
+  `Search all configured accounts when account is omitted, or one account when it is passed. scope='all' searches each selected account's user mail; scope='folder' searches one exact folder and scope='subtree' includes descendants. Folder-based searches require an account and explicit scope. Global search prefers each server's all-mail mailbox; its fallback includes Inbox, Archive, Sent, and custom mail folders while excluding Drafts, Junk, Trash, and duplicate virtual folders. 'query' matches subject/body/from/to text; narrow with 'from'/'subject'/'since' (ISO date). Results are deduplicated, globally newest-first, limited across accounts, and include account+folder+uid+uidValidity handles for later operations. Cross-account failures are returned alongside partial hits. Accounts: ${accounts}`;
 
 export const readOnlyAnnotations = { readOnlyHint: true } as const;
 export const draftWriteAnnotations = {
   readOnlyHint: false,
   destructiveHint: false,
+} as const;
+export const draftTagAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: true,
 } as const;
 export const draftReplacementAnnotations = {
   readOnlyHint: false,
@@ -131,6 +136,30 @@ export const updateDraftFields = {
 export const deleteDraftFields = {
   account: z.string(),
   ...draftLocationFields,
+} as const;
+
+// IMAP keywords use the visible ASCII atom grammar. Action-bearing keyword
+// policy is separate; broadening this grammar must not admit system flags.
+const imapKeywordPattern =
+  /^(?!.*[\u0022\u0025\u0028-\u002a\u005c\u005d\u007b])[\u0021-\u007e]+$/u;
+
+export const tagDraftsFields = {
+  drafts: z
+    .array(
+      z.object({
+        account: z.string(),
+        folder: z.string(),
+        uid: z.number().int().positive(),
+        uidValidity: z.string(),
+      }),
+    )
+    .min(1),
+  tagKey: z
+    .string()
+    .regex(imapKeywordPattern)
+    .describe(
+      'Thunderbird tag key or IMAP keyword, such as $label1 or welle=201.',
+    ),
 } as const;
 
 export const textResult = (text: string, isError = false) => ({
