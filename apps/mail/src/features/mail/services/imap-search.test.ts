@@ -36,6 +36,7 @@ const fakeClient = (
         release: () => events.push(`release:${folder}`),
       });
     },
+    mailbox: { uidValidity: 111n },
     search: () =>
       Promise.resolve(
         (messages.get(selectedFolder) ?? []).map(({ uid }) => uid),
@@ -89,7 +90,11 @@ describe('searchMailboxes', () => {
       }),
     );
     expect(hits).toHaveLength(1);
-    expect(hits[0]?.hit).toMatchObject({ folder: 'INBOX', uid: 1 });
+    expect(hits[0]?.hit).toMatchObject({
+      folder: 'INBOX',
+      uid: 1,
+      uidValidity: '111',
+    });
     expect(events).toEqual(['lock:INBOX', 'release:INBOX']);
   });
 

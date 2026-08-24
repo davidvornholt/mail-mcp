@@ -23,6 +23,7 @@ import {
   textResult,
   updateDraftFields,
 } from './mcp-contract';
+import { registerDraftTagTool } from './mcp-draft-tags';
 import {
   accountEmails,
   accountList,
@@ -173,6 +174,8 @@ server.registerTool(
       }),
     ),
 );
+
+registerDraftTagTool(server, accountList);
 
 server.registerTool(
   'delete_draft',

@@ -1,4 +1,5 @@
 import { Effect } from 'effect';
+import type { ImapFlow } from 'imapflow';
 import type { MailError } from '../errors/errors';
 import type {
   AttachmentContent,
@@ -8,12 +9,14 @@ import type {
   SearchOptions,
   SearchOptionsInput,
   SearchResult,
+  TagDraftsInput,
   UpdateDraftInput,
 } from '../schemas/mail';
 import { searchAccounts } from './account-search';
 import { readAttachment } from './attachment';
 import { MailConfig } from './config';
 import { removeDraft, replaceDraft, writeDraft } from './draft';
+import { tagDrafts } from './draft-tags';
 import {
   closeClient,
   connectClient,
@@ -45,6 +48,11 @@ export const searchWithDedicatedClient = <Client extends WarmClient, Result>(
   );
 };
 
+const tagAccountDrafts = (
+  client: Effect.Effect<ImapFlow, MailError>,
+  input: TagDraftsInput,
+) => client.pipe(Effect.flatMap((candidate) => tagDrafts(candidate, input)));
+
 // One IMAP service instance keeps a warm, authenticated connection per account
 // so the MCP server reuses it across tool calls. Connections are closed by the
 // scope finalizer when the runtime is disposed.
@@ -64,8 +72,8 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
         }),
     );
     const searchMailbox = (email: string, options: SearchOptions) =>
-      clientFor(email).pipe(
-        Effect.flatMap((client) => searchMailboxes(client, options)),
+      Effect.flatMap(clientFor(email), (client) =>
+        searchMailboxes(client, options),
       );
     const searchMailboxWithinDeadline = (
       email: string,
@@ -142,6 +150,8 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
           const client = yield* clientFor(input.account);
           return yield* replaceDraft(client, account, input);
         }),
+      tagDrafts: (input: TagDraftsInput) =>
+        tagAccountDrafts(clientFor(input.account), input),
       deleteDraft: (
         email: string,
         folder: string,

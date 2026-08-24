@@ -14,6 +14,7 @@ export const mailboxHit = (
 ): MailboxSearchHit => ({
   hit: {
     uid,
+    uidValidity: '111',
     folder: 'INBOX',
     from: 'sender@example.com',
     to: 'me@example.com',

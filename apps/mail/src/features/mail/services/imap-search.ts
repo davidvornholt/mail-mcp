@@ -1,6 +1,6 @@
 import { Chunk, Effect, Stream } from 'effect';
 import type { FetchMessageObject, ImapFlow } from 'imapflow';
-import type { ImapError } from '../errors/errors';
+import { ImapError } from '../errors/errors';
 import type { SearchHit, SearchOptions } from '../schemas/mail';
 import { imapError, listMailboxes } from './imap-ops';
 import { buildSearchQuery } from './imap-query';
@@ -28,11 +28,13 @@ const toIsoDate = (value: Date | string | undefined): string =>
 const toCandidate = (
   message: FetchMessageObject,
   folder: string,
+  uidValidity: string,
 ): MailboxSearchHit => {
   const { envelope } = message;
   return {
     hit: {
       uid: message.uid,
+      uidValidity,
       folder,
       from: joinAddresses(envelope?.from),
       to: joinAddresses(envelope?.to),
@@ -52,6 +54,14 @@ const searchOneFolder = (
 ): Effect.Effect<ReadonlyArray<MailboxSearchHit>, ImapError> =>
   Effect.gen(function* () {
     yield* lockMailbox(client, folder);
+    const uidValidity =
+      client.mailbox === false
+        ? yield* Effect.fail(
+            new ImapError({
+              message: `search ${folder} failed: UIDVALIDITY is unavailable after selecting the mailbox`,
+            }),
+          )
+        : client.mailbox.uidValidity.toString();
     const found = yield* Effect.tryPromise({
       try: () => client.search(buildSearchQuery(options), { uid: true }),
       catch: imapError(`search ${folder}`),
@@ -72,7 +82,7 @@ const searchOneFolder = (
       ),
     );
     return Chunk.toReadonlyArray(messages).map((message) =>
-      toCandidate(message, folder),
+      toCandidate(message, folder, uidValidity),
     );
   }).pipe(Effect.scoped);
 
