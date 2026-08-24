@@ -96,8 +96,16 @@ const requireAllTagged = (
   });
 
 type DraftHandle = TagDraftsInput['drafts'][number];
+type DraftSourceField = 'account' | 'folder' | 'uidValidity';
 
-const requireOneUidValidity = (
+const rejectMixedHandles = (field: DraftSourceField) =>
+  Effect.fail(
+    new DraftError({
+      message: `refusing to tag drafts with mixed ${field} handles; search the drafts folder again`,
+    }),
+  );
+
+export const requireOneDraftSource = (
   drafts: ReadonlyArray<DraftHandle>,
 ): Effect.Effect<DraftHandle, DraftError> => {
   const [firstDraft] = drafts;
@@ -106,15 +114,16 @@ const requireOneUidValidity = (
       new DraftError({ message: 'at least one draft handle is required' }),
     );
   }
+  if (drafts.some(({ account }) => account !== firstDraft.account)) {
+    return rejectMixedHandles('account');
+  }
+  if (drafts.some(({ folder }) => folder !== firstDraft.folder)) {
+    return rejectMixedHandles('folder');
+  }
   if (
     drafts.some(({ uidValidity }) => uidValidity !== firstDraft.uidValidity)
   ) {
-    return Effect.fail(
-      new DraftError({
-        message:
-          'refusing to tag drafts with mixed uidValidity handles; search the drafts folder again',
-      }),
-    );
+    return rejectMixedHandles('uidValidity');
   }
   return Effect.succeed(firstDraft);
 };
@@ -141,13 +150,13 @@ const requireCurrentUidValidity = (
 
 export const tagDrafts = (
   client: ImapFlow,
-  input: Omit<TagDraftsInput, 'account'>,
+  input: TagDraftsInput,
 ): Effect.Effect<TagDraftsResult, DraftError | ImapError | StaleUidError> =>
   Effect.gen(function* () {
-    const { folder, drafts, tagKey } = input;
-    const firstDraft = yield* requireOneUidValidity(drafts);
+    const { drafts, tagKey } = input;
+    const firstDraft = yield* requireOneDraftSource(drafts);
     const folders = yield* listFolders(client);
-    const draftsFolder = yield* requireDraftsFolder(folders, folder);
+    const draftsFolder = yield* requireDraftsFolder(folders, firstDraft.folder);
     const uniqueDrafts = [
       ...new Map(drafts.map((draft) => [draft.uid, draft])).values(),
     ];
@@ -182,7 +191,6 @@ export const tagDrafts = (
     }
     yield* requireAllTagged(client, draftsFolder, uniqueUids, storedTagKey);
     return {
-      folder: draftsFolder,
       drafts: uniqueDrafts,
       tagKey: storedTagKey,
       tagged: uniqueUids.length,

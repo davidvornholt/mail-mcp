@@ -2,7 +2,6 @@ import { describe, expect, it } from 'bun:test';
 import { Effect } from 'effect';
 import { tagDrafts } from './draft-tags';
 import {
-  draftsFolder,
   existingUid,
   fakeClient,
   handle,
@@ -17,7 +16,6 @@ describe('tagDrafts validation', () => {
     const events: Array<string> = [];
     const result = await Effect.runPromise(
       tagDrafts(fakeClient(events), {
-        folder: draftsFolder,
         drafts: [handle(existingUid), handle(secondUid), handle(existingUid)],
         tagKey,
       }),
@@ -26,7 +24,6 @@ describe('tagDrafts validation', () => {
     expect(events).toEqual([`tag:${existingUid},${secondUid}:${tagKey}`]);
     const taggedDrafts = [handle(existingUid), handle(secondUid)];
     expect(result).toEqual({
-      folder: draftsFolder,
       drafts: taggedDrafts,
       tagKey,
       tagged: taggedDrafts.length,
@@ -38,7 +35,6 @@ describe('tagDrafts validation', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient(events, { foundBeforeUpdate: [existingUid] }), {
-          folder: draftsFolder,
           drafts: [handle(existingUid), handle(missingUid), handle(secondUid)],
           tagKey,
         }),
@@ -57,7 +53,6 @@ describe('tagDrafts validation', () => {
         tagDrafts(
           fakeClient(events, { permanentFlags: ['\\Seen', '$label2'] }),
           {
-            folder: draftsFolder,
             drafts: [handle(existingUid)],
             tagKey,
           },
@@ -74,7 +69,6 @@ describe('tagDrafts validation', () => {
     const events: Array<string> = [];
     const result = await Effect.runPromise(
       tagDrafts(fakeClient(events, { permanentFlags: ['$LABEL1'] }), {
-        folder: draftsFolder,
         drafts: [handle(existingUid)],
         tagKey: '$label1',
       }),
@@ -90,7 +84,6 @@ describe('tagDrafts completion', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient([], { updateResult: false }), {
-          folder: draftsFolder,
           drafts: [handle(existingUid)],
           tagKey,
         }),
@@ -105,8 +98,7 @@ describe('tagDrafts completion', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient([]), {
-          folder: 'INBOX',
-          drafts: [handle(existingUid)],
+          drafts: [handle(existingUid, { folder: 'INBOX' })],
           tagKey,
         }),
       ),
@@ -120,7 +112,6 @@ describe('tagDrafts completion', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient(events, { uidValidity: reindexedUidValidity }), {
-          folder: draftsFolder,
           drafts: [handle(existingUid), handle(secondUid)],
           tagKey,
         }),
@@ -137,8 +128,10 @@ describe('tagDrafts completion', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient(events, { uidValidity: reindexedUidValidity }), {
-          folder: draftsFolder,
-          drafts: [handle(existingUid), handle(secondUid, '222')],
+          drafts: [
+            handle(existingUid),
+            handle(secondUid, { uidValidity: '222' }),
+          ],
           tagKey,
         }),
       ),
@@ -154,7 +147,6 @@ describe('tagDrafts completion', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient(events, { foundAfterUpdate: [existingUid] }), {
-          folder: draftsFolder,
           drafts: [handle(existingUid), handle(secondUid)],
           tagKey,
         }),
@@ -170,7 +162,6 @@ describe('tagDrafts completion', () => {
     const error = await Effect.runPromise(
       Effect.flip(
         tagDrafts(fakeClient([], { flagsAfterUpdate: [] }), {
-          folder: draftsFolder,
           drafts: [handle(existingUid)],
           tagKey,
         }),

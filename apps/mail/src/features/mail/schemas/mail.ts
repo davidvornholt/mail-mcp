@@ -121,22 +121,20 @@ export type UpdateDraftInput = DraftInput & {
   readonly uidValidity?: string;
 };
 
-export type TagDraftsInput = {
+export type DraftTagHandle = {
   readonly account: string;
   readonly folder: string;
-  readonly drafts: ReadonlyArray<{
-    readonly uid: number;
-    readonly uidValidity: string;
-  }>;
+  readonly uid: number;
+  readonly uidValidity: string;
+};
+
+export type TagDraftsInput = {
+  readonly drafts: ReadonlyArray<DraftTagHandle>;
   readonly tagKey: string;
 };
 
 export type TagDraftsResult = {
-  readonly folder: string;
-  readonly drafts: ReadonlyArray<{
-    readonly uid: number;
-    readonly uidValidity: string;
-  }>;
+  readonly drafts: ReadonlyArray<DraftTagHandle>;
   readonly tagKey: string;
   readonly tagged: number;
 };

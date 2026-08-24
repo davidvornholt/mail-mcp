@@ -1,6 +1,7 @@
 import type { ImapFlow } from 'imapflow';
 
 export const draftsFolder = 'Drafts';
+export const account = 'test@example.com';
 export const tagKey = '$label1';
 export const existingUid = 7;
 export const missingUid = 8;
@@ -56,7 +57,15 @@ export const fakeClient = (
   } as unknown as ImapFlow;
 };
 
-export const handle = (uid: number, uidValidity = expectedUidValidity) => ({
+type HandleOverrides = {
+  readonly account?: string;
+  readonly folder?: string;
+  readonly uidValidity?: string;
+};
+
+export const handle = (uid: number, overrides: HandleOverrides = {}) => ({
+  account: overrides.account ?? account,
+  folder: overrides.folder ?? draftsFolder,
   uid,
-  uidValidity,
+  uidValidity: overrides.uidValidity ?? expectedUidValidity,
 });

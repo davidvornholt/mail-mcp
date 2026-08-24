@@ -16,7 +16,7 @@ import { searchAccounts } from './account-search';
 import { readAttachment } from './attachment';
 import { MailConfig } from './config';
 import { removeDraft, replaceDraft, writeDraft } from './draft';
-import { tagDrafts } from './draft-tags';
+import { requireOneDraftSource, tagDrafts } from './draft-tags';
 import {
   closeClient,
   connectClient,
@@ -48,10 +48,15 @@ export const searchWithDedicatedClient = <Client extends WarmClient, Result>(
   );
 };
 
-const tagAccountDrafts = (
-  client: Effect.Effect<ImapFlow, MailError>,
+export const tagAccountDrafts = (
+  clientFor: (account: string) => Effect.Effect<ImapFlow, MailError>,
   input: TagDraftsInput,
-) => client.pipe(Effect.flatMap((candidate) => tagDrafts(candidate, input)));
+) =>
+  Effect.gen(function* () {
+    const firstDraft = yield* requireOneDraftSource(input.drafts);
+    const client = yield* clientFor(firstDraft.account);
+    return yield* tagDrafts(client, input);
+  });
 
 // One IMAP service instance keeps a warm, authenticated connection per account
 // so the MCP server reuses it across tool calls. Connections are closed by the
@@ -150,8 +155,7 @@ export class Imap extends Effect.Service<Imap>()('mail/Imap', {
           const client = yield* clientFor(input.account);
           return yield* replaceDraft(client, account, input);
         }),
-      tagDrafts: (input: TagDraftsInput) =>
-        tagAccountDrafts(clientFor(input.account), input),
+      tagDrafts: (input: TagDraftsInput) => tagAccountDrafts(clientFor, input),
       deleteDraft: (
         email: string,
         folder: string,

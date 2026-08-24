@@ -12,17 +12,15 @@ export const registerDraftTagTool = (
   server.registerTool(
     'tag_drafts',
     {
-      description: `Add one Thunderbird tag key or IMAP keyword to existing drafts. Pass each draft's uid and uidValidity handles from search_mail together; the operation checks that the mailbox was not reindexed, every UID exists, and every requested draft has the tag before reporting success. It refuses messages outside the account's Drafts folder. Built-in Thunderbird keys are $label1 through $label5; custom keywords appear by name only when Thunderbird has a matching custom tag. Accounts: ${accounts}`,
+      description: `Add one Thunderbird tag key or IMAP keyword to existing drafts. Pass each draft's complete account, folder, uid, and uidValidity handle from search_mail; the operation rejects handles from different accounts, folders, or mailbox generations before connecting, then checks that every UID exists and has the tag before reporting success. It refuses messages outside the account's Drafts folder. Built-in Thunderbird keys are $label1 through $label5; custom keywords appear by name only when Thunderbird has a matching custom tag. Accounts: ${accounts}`,
       inputSchema: tagDraftsFields,
       annotations: draftTagAnnotations,
     },
-    ({ account, folder, drafts, tagKey }) =>
+    ({ drafts, tagKey }) =>
       runTool(
         Effect.gen(function* () {
           const imap = yield* Imap;
           return yield* imap.tagDrafts({
-            account,
-            folder,
             drafts,
             tagKey,
           });

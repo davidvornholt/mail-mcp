@@ -16,15 +16,17 @@ it(
     expect(
       tools.find((tool) => tool.name === 'tag_drafts')?.inputSchema,
     ).toMatchObject({
-      required: ['account', 'folder', 'drafts', 'tagKey'],
+      required: ['drafts', 'tagKey'],
       properties: {
         drafts: {
           type: 'array',
           minItems: 1,
           items: {
             type: 'object',
-            required: ['uid', 'uidValidity'],
+            required: ['account', 'folder', 'uid', 'uidValidity'],
             properties: {
+              account: { type: 'string' },
+              folder: { type: 'string' },
               uid: { type: 'integer', exclusiveMinimum: 0 },
               uidValidity: { type: 'string' },
             },
@@ -44,9 +46,14 @@ it.each(['campaign+eu', 'campaign/eu', 'launch=20+=20europe'])(
     const result = await client.callTool({
       name: 'tag_drafts',
       arguments: {
-        account: 'unknown@example.com',
-        folder: 'Drafts',
-        drafts: [{ uid: 1, uidValidity: '111' }],
+        drafts: [
+          {
+            account: 'unknown@example.com',
+            folder: 'Drafts',
+            uid: 1,
+            uidValidity: '111',
+          },
+        ],
         tagKey,
       },
     });

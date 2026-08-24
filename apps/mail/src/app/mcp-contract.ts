@@ -144,11 +144,11 @@ const imapKeywordPattern =
   /^(?!.*[\u0022\u0025\u0028-\u002a\u005c\u005d\u007b])[\u0021-\u007e]+$/u;
 
 export const tagDraftsFields = {
-  account: z.string(),
-  folder: z.string(),
   drafts: z
     .array(
       z.object({
+        account: z.string(),
+        folder: z.string(),
         uid: z.number().int().positive(),
         uidValidity: z.string(),
       }),
