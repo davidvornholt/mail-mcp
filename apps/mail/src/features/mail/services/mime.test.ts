@@ -54,6 +54,15 @@ describe('buildMime', () => {
     expect(parsed.html).toContain('<p>Is 2 &lt; 3 &amp; sure?</p>');
   });
 
+  it('keeps Bcc recipients in stored draft MIME', async () => {
+    const bcc = 'hidden@example.com';
+    const { raw, parsed } = await buildAndParse(draft({ bcc }));
+    const parsedBcc = Array.isArray(parsed.bcc) ? parsed.bcc[0] : parsed.bcc;
+
+    expect(raw.toString()).toContain(`Bcc: ${bcc}\r\n`);
+    expect(parsedBcc?.text).toBe(bcc);
+  });
+
   it('builds HTML alternatives and file attachments', async () => {
     const attachmentPath = Bun.fileURLToPath(
       new URL('attachment.fixture.txt', import.meta.url),
