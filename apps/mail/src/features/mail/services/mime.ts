@@ -23,7 +23,7 @@ export const buildMime = (
               references: input.references,
             }
           : buildReplyContent(input.text, html, repliedTo);
-      return new MailComposer({
+      const message = new MailComposer({
         from: `"${account.name}" <${account.email}>`,
         to: input.to,
         cc: input.cc,
@@ -44,9 +44,9 @@ export const buildMime = (
           content.references === undefined
             ? undefined
             : [...content.references],
-      })
-        .compile()
-        .build();
+      }).compile();
+      message.keepBcc = true;
+      return message.build();
     },
     catch: (cause) =>
       new DraftError({ message: `failed to build draft: ${String(cause)}` }),
