@@ -1,6 +1,6 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "61e9526151c4e1e416dedac30017fc8c2f725311",
+  "sha": "f8cd9d0023be6a44a7b5ac587edcdd12c5edbb84",
   "files": {
     ".agents/skills/ci-pipelines/SKILL.md": "173500b1274bc8eae4cedbb1b10c5ad048cb75c6ac7a70d995e3cd6642074ca1",
     ".agents/skills/database/agents/openai.yaml": "4c9f47df24219d5b195c88eef374431f64b453ed1ba057f50d4c11e4549343c1",
@@ -36,7 +36,7 @@
     "AGENTS.md": "cd8c56de4957273ed07e2379bf3e016b8290470e6573cacb08d5f7cf24bf9adc",
     "biome.base.jsonc": "5c2e84360d35e6375311791c4a89011921a50b2d3a166ee5223632f5db4f52f3",
     "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
-    "justfile": "771a506523e66f2b7f0e565a55f96f2dce6ee04ca7db29d1c9e20c982fcffcd9",
+    "justfile": "2b52e2a98fbdbe43aef6134e08f1937642f7fb3aa46f195e94fb01793465a45c",
     "packages/a11y-testing/package.json": "673a94b65347ffce391895995cc5aca573ccacb1d5e3ae981ec6bec020515e0e",
     "packages/a11y-testing/README.md": "1678d2f955105c14079062df12c4e8fb00e5e2e600d14701b0eb0c4a39583a4b",
     "packages/a11y-testing/src/axe.ts": "8dc8fee67bc124ebef4b8eefa3aa8cc3deb22522fa134d455a8156d5b20a7949",
