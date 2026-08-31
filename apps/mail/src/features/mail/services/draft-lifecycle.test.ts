@@ -19,6 +19,9 @@ const draftFolders = [
 ];
 
 const targetUid = 7;
+const draftSource = Buffer.from(
+  'From: sender@example.com\r\nTo: recipient@example.com\r\nSubject: Original\r\n\r\nOriginal body',
+);
 
 describe('replaceDraft', () => {
   const fakeClient = (
@@ -32,7 +35,11 @@ describe('replaceDraft', () => {
         return Promise.resolve({ uid: 42, uidValidity: 111n });
       },
       getMailboxLock: () => Promise.resolve({ release: () => undefined }),
-      fetchOne: () => Promise.resolve({ uid: targetUid }),
+      fetchOne: () =>
+        Promise.resolve({
+          uid: targetUid,
+          source: draftSource,
+        }),
       messageDelete: () => {
         events.push('delete');
         return Promise.resolve(options.deleteResult ?? true);
@@ -80,7 +87,11 @@ describe('replaceDraft', () => {
       list: () => Promise.resolve(draftFolders),
       append: () => Promise.resolve({ destination: 'Drafts' }),
       getMailboxLock: () => Promise.resolve({ release: () => undefined }),
-      fetchOne: () => Promise.resolve({ uid: targetUid }),
+      fetchOne: () =>
+        Promise.resolve({
+          uid: targetUid,
+          source: draftSource,
+        }),
       messageDelete: () => Promise.resolve(true),
     } as unknown as ImapFlow;
 

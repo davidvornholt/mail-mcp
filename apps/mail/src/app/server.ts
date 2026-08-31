@@ -104,7 +104,7 @@ server.registerTool(
 server.registerTool(
   'read_message',
   {
-    description: `Read one full message by account + folder + uid (from search_mail), including attachment metadata and part handles. Accounts: ${accountList}`,
+    description: `Read one full message by account + folder + uid (from search_mail), including BCC recipients, attachment metadata, and part handles. Accounts: ${accountList}`,
     inputSchema: readMessageFields,
     annotations: readOnlyAnnotations,
   },
@@ -158,7 +158,7 @@ server.registerTool(
 server.registerTool(
   'update_draft',
   {
-    description: `Replace an existing draft identified by its drafts folder + uid. Compose the replacement to the same standard as save_draft: the user's instructions are intent, not dictation. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
+    description: `Replace an existing draft identified by its drafts folder + uid. Compose the replacement to the same standard as save_draft: the user's instructions are intent, not dictation. Existing BCC recipients are preserved when bcc is omitted; pass an empty bcc string to remove them. The replacement is saved before the old draft is deleted. Messages outside the account's Drafts folder are refused. Pass the uidValidity from the draft's save response so a mailbox reindex cannot expunge the wrong message. Accounts: ${accountList}`,
     inputSchema: updateDraftFields,
     annotations: draftReplacementAnnotations,
   },

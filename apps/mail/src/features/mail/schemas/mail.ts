@@ -56,6 +56,7 @@ export type FullMessage = {
   readonly from: string;
   readonly to: string;
   readonly cc: string;
+  readonly bcc: string;
   readonly subject: string;
   readonly date: string;
   readonly attributionDate: string;
