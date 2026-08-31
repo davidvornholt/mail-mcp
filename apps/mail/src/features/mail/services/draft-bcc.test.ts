@@ -16,6 +16,7 @@ const account: Account = {
   user: 'sender@example.com',
 };
 const existingBcc = 'hidden@example.com';
+const reindexedUidValidity = 222n;
 const draftSource = Buffer.from(
   [
     'From: sender@example.com',
@@ -39,7 +40,7 @@ const input: UpdateDraftInput = {
   text: 'Updated body',
 };
 
-const clientWith = (appended: Array<Buffer>): ImapFlow =>
+const clientWith = (appended: Array<Buffer>, uidValidity = 111n): ImapFlow =>
   ({
     list: () => Promise.resolve(draftFolders),
     append: (_folder: string, raw: Buffer) => {
@@ -47,6 +48,7 @@ const clientWith = (appended: Array<Buffer>): ImapFlow =>
       return Promise.resolve({ uid: 42, uidValidity: 111n });
     },
     getMailboxLock: () => Promise.resolve({ release: () => undefined }),
+    mailbox: { uidValidity },
     fetchOne: () => Promise.resolve({ uid: input.uid, source: draftSource }),
     messageDelete: () => Promise.resolve(true),
   }) as unknown as ImapFlow;
@@ -81,5 +83,20 @@ describe('draft Bcc lifecycle', () => {
     const parsed = await parseReplacement({ ...input, bcc: '' });
 
     expect(parsed.bcc).toBeUndefined();
+  });
+
+  it('does not append a replacement for a stale draft handle', async () => {
+    const appended: Array<Buffer> = [];
+    const error = await Effect.runPromise(
+      Effect.flip(
+        replaceDraft(clientWith(appended, reindexedUidValidity), account, {
+          ...input,
+          uidValidity: '111',
+        }),
+      ),
+    );
+
+    expect(error._tag).toBe('StaleUidError');
+    expect(appended).toHaveLength(0);
   });
 });

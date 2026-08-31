@@ -49,6 +49,30 @@ const appendDraft = (
     })),
   );
 
+const requireCurrentUidValidity = (
+  client: ImapFlow,
+  folder: string,
+  uid: number,
+  expectedUidValidity?: string,
+): Effect.Effect<void, ImapError | StaleUidError> =>
+  expectedUidValidity === undefined
+    ? Effect.void
+    : Effect.gen(function* () {
+        yield* lockMailbox(client, folder);
+        const { mailbox } = client;
+        const currentUidValidity =
+          mailbox === false ? null : mailbox.uidValidity.toString();
+        if (currentUidValidity !== expectedUidValidity) {
+          return yield* Effect.fail(
+            new StaleUidError({
+              folder,
+              uid,
+              message: `refusing to modify draft uid ${uid}: "${folder}" was reindexed (uidValidity ${expectedUidValidity} → ${currentUidValidity ?? 'unknown'}); re-fetch the draft handle`,
+            }),
+          );
+        }
+      }).pipe(Effect.scoped);
+
 const deleteDraft = (
   client: ImapFlow,
   folder: string,
@@ -56,21 +80,8 @@ const deleteDraft = (
   expectedUidValidity?: string,
 ): Effect.Effect<void, ImapError | MessageNotFoundError | StaleUidError> =>
   Effect.gen(function* () {
+    yield* requireCurrentUidValidity(client, folder, uid, expectedUidValidity);
     yield* lockMailbox(client, folder);
-    if (expectedUidValidity !== undefined) {
-      const { mailbox } = client;
-      const currentUidValidity =
-        mailbox === false ? null : mailbox.uidValidity.toString();
-      if (currentUidValidity !== expectedUidValidity) {
-        return yield* Effect.fail(
-          new StaleUidError({
-            folder,
-            uid,
-            message: `refusing to expunge draft uid ${uid}: "${folder}" was reindexed (uidValidity ${expectedUidValidity} → ${currentUidValidity ?? 'unknown'}); re-fetch the draft handle`,
-          }),
-        );
-      }
-    }
     const existing = yield* Effect.tryPromise({
       try: () => client.fetchOne(String(uid), { uid: true }, { uid: true }),
       catch: (cause) =>
@@ -139,12 +150,18 @@ export const replaceDraft = (
   input: UpdateDraftInput,
 ): Effect.Effect<
   DraftLocation,
-  ImapError | DraftError | MessageNotFoundError
+  ImapError | DraftError | MessageNotFoundError | StaleUidError
 > =>
   Effect.gen(function* () {
     const folders = yield* listFolders(client);
     const draftsFolder = yield* requireDraftsFolder(folders, input.folder);
     const repliedTo = yield* readReplySource(client, input);
+    yield* requireCurrentUidValidity(
+      client,
+      draftsFolder,
+      input.uid,
+      input.uidValidity,
+    );
     const existingBcc =
       input.bcc ?? (yield* readMessage(client, draftsFolder, input.uid)).bcc;
     const raw = yield* buildMime(
