@@ -63,6 +63,7 @@ const toFullMessage = (
   from: addressText(parsed.from),
   to: addressText(parsed.to),
   cc: addressText(parsed.cc),
+  bcc: addressText(parsed.bcc),
   subject: parsed.subject ?? '',
   date: parsed.date?.toISOString() ?? '',
   attributionDate: rawHeaderValue(parsed, 'date'),

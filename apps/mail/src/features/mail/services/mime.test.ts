@@ -98,6 +98,7 @@ describe('buildMime', () => {
         from: 'Original Sender <original@example.com>',
         to: account.email,
         cc: '',
+        bcc: '',
         subject: 'Question',
         date: '2026-07-13T08:30:00.000Z',
         attributionDate: '2026-07-13T08:30:00',

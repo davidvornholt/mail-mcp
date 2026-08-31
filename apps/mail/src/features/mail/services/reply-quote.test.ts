@@ -28,6 +28,7 @@ const message: FullMessage = {
   from: 'Sender & Co <sender@example.com>',
   to: 'recipient@example.com',
   cc: '',
+  bcc: '',
   subject: 'Question',
   date: '2026-07-13T08:30:00.000Z',
   attributionDate: '2026-07-13T08:30:00.000Z',

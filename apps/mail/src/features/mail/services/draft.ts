@@ -145,7 +145,13 @@ export const replaceDraft = (
     const folders = yield* listFolders(client);
     const draftsFolder = yield* requireDraftsFolder(folders, input.folder);
     const repliedTo = yield* readReplySource(client, input);
-    const raw = yield* buildMime(account, input, repliedTo);
+    const existingBcc =
+      input.bcc ?? (yield* readMessage(client, draftsFolder, input.uid)).bcc;
+    const raw = yield* buildMime(
+      account,
+      { ...input, bcc: existingBcc },
+      repliedTo,
+    );
     const replacement = yield* appendDraft(client, draftsFolder, raw);
     yield* deleteDraft(client, draftsFolder, input.uid, input.uidValidity).pipe(
       Effect.mapError(
