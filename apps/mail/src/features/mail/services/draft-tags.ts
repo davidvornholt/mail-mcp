@@ -3,6 +3,7 @@ import type { ImapFlow } from 'imapflow';
 import { DraftError, ImapError, StaleUidError } from '../errors/errors';
 import type { TagDraftsInput, TagDraftsResult } from '../schemas/mail';
 import { requireDraftsFolder } from './draft';
+import { currentUidValidity } from './draft-uid';
 import { listFolders } from './imap-ops';
 import { lockMailbox } from './mailbox-lock';
 
@@ -134,16 +135,15 @@ const requireCurrentUidValidity = (
   firstUid: number,
   expectedUidValidity: string,
 ): Effect.Effect<void, StaleUidError> => {
-  const currentUidValidity =
-    client.mailbox === false ? null : client.mailbox.uidValidity.toString();
-  if (currentUidValidity === expectedUidValidity) {
+  const current = currentUidValidity(client);
+  if (current === expectedUidValidity) {
     return Effect.void;
   }
   return Effect.fail(
     new StaleUidError({
       folder,
       uid: firstUid,
-      message: `refusing to tag drafts: "${folder}" was reindexed (uidValidity ${expectedUidValidity} → ${currentUidValidity ?? 'unknown'}); search the drafts folder again`,
+      message: `refusing to tag drafts: "${folder}" was reindexed (uidValidity ${expectedUidValidity} → ${current ?? 'unknown'}); search the drafts folder again`,
     }),
   );
 };

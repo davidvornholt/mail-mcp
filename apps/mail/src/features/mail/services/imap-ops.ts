@@ -90,13 +90,13 @@ export const listMailboxes = (
     catch: imapError('list folders'),
   });
 
-export const readMessage = (
+// Callers must hold the target folder's mailbox lock while using this helper.
+export const readMessageContents = (
   client: ImapFlow,
   folder: string,
   uid: number,
 ): Effect.Effect<FullMessage, ImapError | MessageNotFoundError> =>
   Effect.gen(function* () {
-    yield* lockMailbox(client, folder);
     const message = yield* Effect.tryPromise({
       try: () =>
         client.fetchOne(
@@ -124,4 +124,14 @@ export const readMessage = (
       ...toFullMessage(parsed, folder, uid),
       attachments: listAttachments(message.bodyStructure),
     };
+  });
+
+export const readMessage = (
+  client: ImapFlow,
+  folder: string,
+  uid: number,
+): Effect.Effect<FullMessage, ImapError | MessageNotFoundError> =>
+  Effect.gen(function* () {
+    yield* lockMailbox(client, folder);
+    return yield* readMessageContents(client, folder, uid);
   }).pipe(Effect.scoped);

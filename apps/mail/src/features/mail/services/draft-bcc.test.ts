@@ -99,4 +99,47 @@ describe('draft Bcc lifecycle', () => {
     expect(error._tag).toBe('StaleUidError');
     expect(appended).toHaveLength(0);
   });
+
+  it('keeps replacement and deletion under one mailbox lock', async () => {
+    const events: Array<string> = [];
+    const mailbox = { uidValidity: 111n };
+    const client = {
+      list: () => Promise.resolve(draftFolders),
+      getMailboxLock: () => {
+        events.push('lock');
+        return Promise.resolve({
+          release: () => {
+            events.push('release');
+            mailbox.uidValidity = reindexedUidValidity;
+          },
+        });
+      },
+      mailbox,
+      fetchOne: () => {
+        events.push('fetch');
+        return Promise.resolve({ uid: input.uid, source: draftSource });
+      },
+      append: () => {
+        events.push('append');
+        return Promise.resolve({ uid: 42, uidValidity: 111n });
+      },
+      messageDelete: () => {
+        events.push('delete');
+        return Promise.resolve(true);
+      },
+    } as unknown as ImapFlow;
+
+    await Effect.runPromise(
+      replaceDraft(client, account, { ...input, uidValidity: '111' }),
+    );
+
+    expect(events).toEqual([
+      'lock',
+      'fetch',
+      'append',
+      'fetch',
+      'delete',
+      'release',
+    ]);
+  });
 });
