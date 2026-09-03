@@ -31,6 +31,8 @@ command="/run/current-system/sw/bin/<repo>-pr-preview-deploy",restrict ssh-ed255
 
 The command reads `SSH_ORIGINAL_COMMAND` with the contract `deploy <pr-number> <app-image> <migration-image> <head-sha>` or `destroy <pr-number>`, and rejects everything else: multi-line input, extra arguments, PR numbers outside `1..999999`, non-40-hex SHAs, and any image reference that is not `<allowed-name>@sha256:<64-hex>`. Package it with `pkgs.writeShellApplication` in a preview-deploy module that also asserts the previews module is enabled and at least one authorized key is present.
 
+The command's package is also its retention boundary. Every store path that the generated command reads after deployment, including the flake source, image manifest, validator, and any other runtime file, must be in that command's own closure. Preserve Nix string context when embedding paths: pass interpolated paths to `pkgs.replaceVars`, `pkgs.writeText`, or the package's `text`, and never convert a path with `toString` before embedding it. `system.extraDependencies` is not a substitute; it can retain a different realization from the path named inside the command. Add a flake check that extracts the store paths named by the generated command, including sourced helper packages, and asserts that each path appears in its closure.
+
 Deploy semantics: take the lock, read the current production image (from the running container, falling back to the recorded deploy state) so the rebuild never moves production, upsert the preview into the state file, `switch`, run migrations, restart the preview container. If any step fails, remove the preview from state, converge again, and drop its database — a failed deploy leaves nothing behind. Destroy is idempotent: a PR number not in state returns success.
 
 Migrations run as a one-shot container as the preview's own UID against the preview's own database over the host Postgres socket, with `--network=none`, dropped capabilities, and resource caps.
@@ -54,7 +56,7 @@ Teardown is event-complete; every path that ends a preview's usefulness destroys
 - Build failed, cancelled, or timed out → destroy, so a stale preview never outlives a broken head. A *skipped* build must not trigger this — skipped means no preview was requested, and destroying on `conclusion != 'success'` would fire on every unlabeled PR.
 - Post-deploy verification (`curl --retry` against the public URL) failed → the deploy destroys its own preview and reports failure rather than leaving a half-alive environment behind.
 
-Every deploy and destroy upserts a single PR comment with the preview URL and state. A daily host timer prunes unused preview images (`podman image prune --filter until=168h`).
+Every successful deploy upserts a single PR comment with the preview URL and state. A failed deploy reports its failure state and source without claiming a live URL. A destroy updates that comment when it exists but does not create one. Idempotent cleanup for a PR that never requested a preview is not preview activity and stays silent; the workflow run still reports cleanup failures. A daily host timer prunes unused preview images (`podman image prune --filter until=168h`).
 
 ## DNS
 
@@ -62,6 +64,6 @@ One wildcard record `*.pr.<domain>` pointing at the host, managed in the tofu st
 
 ## Traps
 
-- The host-side rebuild evaluates the flake from the deployed system, so keep the flake source alive across garbage collection with `system.extraDependencies = [ ../.. ]` in the preview-deploy module; without it, `nix gc` can break the forced command until the next production deploy.
+- The host-side rebuild evaluates the flake from the deployed system. A path converted with `toString` can disappear after `nix gc` even when `system.extraDependencies` retains a different source path; keep the command's own closure complete instead.
 - `workflow_run.pull_requests` can be empty depending on event provenance; guard teardown jobs on the PR number being present instead of assuming `[0]` exists.
 - The deploy workflow must check out the *default branch*, never the triggering head — `workflow_run` runs with secrets, and the artifact is the only thing taken from the untrusted build.
