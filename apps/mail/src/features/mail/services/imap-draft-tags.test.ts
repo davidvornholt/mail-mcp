@@ -29,22 +29,25 @@ describe('tagAccountDrafts source validation', () => {
       [handle(existingUid), handle(secondUid, { uidValidity: '222' })],
       'mixed uidValidity handles',
     ],
-  ] as const)('rejects mixed %s before acquiring an IMAP client', async (_source, drafts, expectedMessage) => {
-    const acquiredAccounts: Array<string> = [];
-    const error = await Effect.runPromise(
-      Effect.flip(
-        tagAccountDrafts(
-          (selectedAccount) => {
-            acquiredAccounts.push(selectedAccount);
-            return Effect.succeed({} as ImapFlow);
-          },
-          { drafts, tagKey },
+  ] as const)(
+    'rejects mixed %s before acquiring an IMAP client',
+    async (_source, drafts, expectedMessage) => {
+      const acquiredAccounts: Array<string> = [];
+      const error = await Effect.runPromise(
+        Effect.flip(
+          tagAccountDrafts(
+            (selectedAccount) => {
+              acquiredAccounts.push(selectedAccount);
+              return Effect.succeed({} as ImapFlow);
+            },
+            { drafts, tagKey },
+          ),
         ),
-      ),
-    );
+      );
 
-    expect(error._tag).toBe('DraftError');
-    expect(error.message).toContain(expectedMessage);
-    expect(acquiredAccounts).toEqual([]);
-  });
+      expect(error._tag).toBe('DraftError');
+      expect(error.message).toContain(expectedMessage);
+      expect(acquiredAccounts).toEqual([]);
+    },
+  );
 });

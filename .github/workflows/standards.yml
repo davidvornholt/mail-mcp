@@ -74,8 +74,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
-    env:
-      DATABASE_URL: postgresql://${{ vars.CI_POSTGRES_USER || 'app' }}:${{ vars.CI_POSTGRES_PASSWORD || 'app' }}@127.0.0.1:5432/${{ vars.CI_POSTGRES_DB || 'app' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -101,6 +99,52 @@ jobs:
           tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
           "$RUNNER_TEMP/actionlint" -color
 
+      # A fixed 127.0.0.1 database URL only works where the job shares the
+      # service's published loopback — true on GitHub-hosted runners, false on
+      # CodeBuild, whose runner is itself an unprivileged container beside the
+      # service, so the published port lands on the build host instead. The
+      # service stays reachable there on its container address or the docker
+      # network gateway. Resolving the endpoint at runtime keeps one uniform
+      # file for both topologies and fails closed with a named error here
+      # instead of letting the first database consumer time out mid-gate.
+      - name: Resolve the database endpoint
+        env:
+          CI_POSTGRES_USER: ${{ vars.CI_POSTGRES_USER || 'app' }}
+          CI_POSTGRES_PASSWORD: ${{ vars.CI_POSTGRES_PASSWORD || 'app' }}
+          CI_POSTGRES_DB: ${{ vars.CI_POSTGRES_DB || 'app' }}
+        run: |
+          set -euo pipefail
+          reachable() {
+            timeout 2 bash -c "exec 3<>/dev/tcp/$1/5432" 2>/dev/null
+          }
+          candidates=()
+          if [ -n "${CODEBUILD_BUILD_ID:-}" ]; then
+            service_container=$(docker ps --filter ancestor=public.ecr.aws/docker/library/postgres:18-alpine --format '{{.ID}}' | head -n 1)
+            if [ -n "$service_container" ]; then
+              service_networks=$(docker inspect "$service_container" \
+                --format '{{range .NetworkSettings.Networks}}{{.IPAddress}} {{.Gateway}} {{end}}')
+              read -r -a service_addresses <<<"$service_networks"
+              candidates+=("${service_addresses[@]}")
+            fi
+            candidates+=("$(docker network inspect bridge \
+              --format '{{range .IPAM.Config}}{{.Gateway}}{{end}}' 2>/dev/null || true)")
+            candidates+=("$(ip route show default 2>/dev/null \
+              | awk '{ for (i = 1; i < NF; i++) if ($i == "via") print $(i + 1) }' | head -n 1)")
+          else
+            candidates=(127.0.0.1)
+          fi
+          for candidate in "${candidates[@]}"; do
+            if [ -n "$candidate" ] && reachable "$candidate"; then
+              echo "Database endpoint: $candidate:5432"
+              printf 'DATABASE_URL=postgresql://%s:%s@%s:5432/%s\n' \
+                "$CI_POSTGRES_USER" "$CI_POSTGRES_PASSWORD" "$candidate" "$CI_POSTGRES_DB" \
+                >> "$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "::error::No candidate endpoint reached the Postgres service (tried: ${candidates[*]})"
+          exit 1
+
       # The canonical justfile and secrets.just are gate-tested: the source
       # repository's CLI suite spawns `just` against them, and one uniform file
       # serves every repo (see the Postgres note above).
@@ -119,10 +163,39 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Read Bun version
+        id: bun
+        run: |
+          set -euo pipefail
+          if ! package_manager="$(jq -er '.packageManager | select(type == "string" and test("^bun@(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"))' package.json)"; then
+            echo '::error::package.json packageManager must pin an exact bun@x.y.z version'
+            exit 1
+          fi
+          echo "version=${package_manager#bun@}" >> "$GITHUB_OUTPUT"
+
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: ${{ steps.bun.outputs.version }}
+
+      - name: Verify Bun version
+        env:
+          EXPECTED_BUN_VERSION: ${{ steps.bun.outputs.version }}
+        run: |
+          set -euo pipefail
+          actual="$(bun --version)"
+          if [[ "$actual" != "$EXPECTED_BUN_VERSION" ]]; then
+            echo "::error::Expected Bun $EXPECTED_BUN_VERSION from package.json, received $actual"
+            exit 1
+          fi
+
+      # Bun is the package manager and default runtime. Some quality tools and
+      # cross-runtime tests intentionally invoke Node, so honor the version the
+      # canonical package manifest declares instead of the runner's ambient one.
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "26"
 
       # PRs may restore the latest default-branch Turbo snapshot but never
       # publish cache state. A successful default-branch run saves at most one
@@ -330,10 +403,10 @@ jobs:
       - name: Install pinned settings checker
         run: |
           set -euo pipefail
-          bun_version=1.3.14
+          bun_version=1.4.0
           case "$(uname -m)" in
-            x86_64) bun_arch=x64; bun_sha=951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f ;;
-            aarch64) bun_arch=aarch64; bun_sha=a27ffb63a8310375836e0d6f668ae17fa8d8d18b88c37c821c65331973a19a3b ;;
+            x86_64) bun_arch=x64; bun_sha=2d03fb5fb83ac8b567aca0a281b2ce1a1a19d488f56c2968d88c3f25e92fe452 ;;
+            aarch64) bun_arch=aarch64; bun_sha=4b1a332ee861983eb93bcfe6f770fff94e3e31b2c388bdaea3c8ed35e58eed0e ;;
             *)
               echo "::error::No pinned Bun binary for runner architecture $(uname -m)"
               exit 1

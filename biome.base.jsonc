@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
   // Canonical strict Biome base, synced from davidvornholt/standards. Do NOT
   // edit locally: repos extend this from their own `biome.jsonc` wrapper and add
   // project-specific overrides there. The baseline turns every applicable rule
@@ -55,6 +55,12 @@
       "linter": {
         "rules": {
           "complexity": {
+            "noExcessiveCognitiveComplexity": {
+              "level": "error",
+              "options": {
+                "maxAllowedComplexity": 15
+              }
+            },
             // JSX render bodies and Effect.gen service pipelines are cohesive
             // single units; the default of 50 lines forces arbitrary splits.
             // 100 still mechanically rejects genuinely sprawling functions.
@@ -82,6 +88,12 @@
               "level": "error",
               "options": {
                 "strictCase": false
+              }
+            },
+            "useFilenamingConvention": {
+              "level": "error",
+              "options": {
+                "filenameCases": ["kebab-case"]
               }
             },
             // Conflicts with the repository standard of inline exports
@@ -123,11 +135,14 @@
             "noExcessiveLinesPerFile": {
               "level": "error",
               "options": {
-                "maxLines": 200
+                "maxLines": 400
               }
             }
           },
           "nursery": {
+            // Rejects assertions even when a runtime check or controlled test
+            // fixture has already established the asserted fact.
+            "noUnsafeTypeAssertion": "off",
             // React Native rule: requires raw text to be wrapped in <Text>.
             // This is a DOM application (reactNative domain is "none"); the
             // group-level "error" above would otherwise force it on.
@@ -196,6 +211,8 @@
         "**/*.test.tsx",
         "packages/standards-cli/src/creds-add-test-support.ts",
         "packages/standards-cli/src/creds-plan-run-test-support.ts",
+        "packages/standards-cli/src/process-env-test-support.ts",
+        "packages/standards-cli/src/screenshots-test-support.ts",
         "packages/standards-cli/src/test-setup.ts"
       ],
       "linter": {
@@ -279,11 +296,13 @@
       }
     },
     {
-      // CLI output is the user interface; dev-env does not read process
+      // CLI output is the user interface; these modules do not read process
       // environment variables directly.
       "includes": [
         "packages/standards-cli/src/dev-env.ts",
-        "packages/standards-cli/src/dev-env-brokered-refresh.ts"
+        "packages/standards-cli/src/dev-env-brokered-refresh.ts",
+        "packages/standards-cli/src/screenshots-commands.ts",
+        "packages/standards-cli/src/screenshots-publish.ts"
       ],
       "linter": {
         "rules": {
@@ -351,6 +370,36 @@
         "rules": {
           "style": {
             "noProcessEnv": "off"
+          }
+        }
+      }
+    },
+    {
+      // Next.js loads App Router UI and metadata special files through default
+      // exports.
+      "includes": [
+        "**/src/app/**/page.tsx",
+        "**/src/app/**/layout.tsx",
+        "**/src/app/**/loading.tsx",
+        "**/src/app/**/error.tsx",
+        "**/src/app/**/global-error.tsx",
+        "**/src/app/**/not-found.tsx",
+        "**/src/app/**/forbidden.tsx",
+        "**/src/app/**/unauthorized.tsx",
+        "**/src/app/**/default.tsx",
+        "**/src/app/**/template.tsx",
+        "**/src/app/**/manifest.ts",
+        "**/src/app/**/robots.ts",
+        "**/src/app/**/sitemap.ts",
+        "**/src/app/**/opengraph-image.tsx",
+        "**/src/app/**/twitter-image.tsx",
+        "**/src/app/**/icon.tsx",
+        "**/src/app/**/apple-icon.tsx"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
           }
         }
       }
@@ -445,7 +494,7 @@
       }
     },
     {
-      // Files allowed to exceed the 200-line limit. Consumers extend this list
+      // Files allowed to exceed the 400-line limit. Consumers extend this list
       // in their own biome.jsonc wrapper and document each entry.
       "includes": [
         "biome.base.jsonc",
