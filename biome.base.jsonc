@@ -140,6 +140,25 @@
             }
           },
           "nursery": {
+            // Biome 2.5.11's first implementation can spend indefinitely
+            // traversing Tailwind and workspace CSS import graphs.
+            "noUndeclaredCustomProperties": "off",
+            // Arbitrary Tailwind values can encode intentional one-off layout
+            // constraints that do not belong in a shared design token.
+            "noTailwindArbitraryValue": "off",
+            // The experimental analyzer reports deliberately wider public
+            // return contracts as errors even when the annotation is useful.
+            "noMisleadingReturnType": "off",
+            // Empty strings can be meaningful fallback signals, so replacing
+            // every intentional logical-or chain with ?? changes behavior.
+            "useNullishCoalescing": "off",
+            // Cross-file inference can classify imported async functions as
+            // synchronous, including React act() and Next server actions.
+            "useAwaitThenable": "off",
+            // This experimental rule enforces React Compiler constraints even
+            // in projects that do not use the compiler and still reports known
+            // unsupported patterns.
+            "useReactCompiler": "off",
             // Rejects assertions even when a runtime check or controlled test
             // fixture has already established the asserted fact.
             "noUnsafeTypeAssertion": "off",
@@ -180,6 +199,11 @@
             // pattern this rule demands targets memoization-sensitive React
             // Native trees and makes components strictly harder to read.
             "noJsxPropsBind": "off"
+          },
+          "suspicious": {
+            // Biome's type analysis treats mutable refs as their initial
+            // literals and can collapse annotated async result unions.
+            "noUnnecessaryConditions": "off"
           }
         }
       }

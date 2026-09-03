@@ -1,6 +1,6 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "c16c36213069ad3514e851fecd1ce6f858d09861",
+  "sha": "778cde05453c820add7fedbc9aea6c80f97e6fae",
   "files": {
     ".agents/skills/ci-pipelines/SKILL.md": "87728fdc98f9ac95df243ef4c1d44d616cc0440e2ae384da28dda83d627e00a0",
     ".agents/skills/database/agents/openai.yaml": "4c9f47df24219d5b195c88eef374431f64b453ed1ba057f50d4c11e4549343c1",
@@ -41,7 +41,7 @@
     ".github/workflows/standards.yml": "ce9af99341a549cb91b2ae430a6a774d20bdb6c0396fc2b7d9020c9815fcb26a",
     ".mise/config.toml": "650a919aa3f06f5dfe20a047250c84f7afbfcc8886862c4421c61e815d2fd3f6",
     "AGENTS.md": "3feb223fc28578673c7b8fd58a682250dba166a89487dfb389ac58c61387851a",
-    "biome.base.jsonc": "251087a6a062e0097f709ea60d9fcb57f4eefc190a3d6df2564342b0a6276d5c",
+    "biome.base.jsonc": "abf829f063a411a369d6ab8241b0c1b37149ee7d444cb962e5050abdc1d10c4a",
     "CLAUDE.md": "336cc4fbf19beaada7ccf9986414fa91851a8d7a07dfb3ccbe800a69eed0ab49",
     "justfile": "2b52e2a98fbdbe43aef6134e08f1937642f7fb3aa46f195e94fb01793465a45c",
     "nix/standards-bun.nix": "5b1776c85e29fc3936f0bd5c9b3ef2832ecadf4508ef33c984cf8993e7a7012a",
