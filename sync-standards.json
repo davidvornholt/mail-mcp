@@ -4,7 +4,6 @@
   "paths": [
     "sync-standards.json",
     "AGENTS.md",
-    "CLAUDE.md",
     ".agents/skills/ci-pipelines",
     ".agents/skills/database",
     ".agents/skills/declarative-infra",
@@ -17,7 +16,6 @@
     ".agents/skills/secrets-and-config",
     ".agents/skills/screenshots-in-prs",
     ".agents/skills/standards-sync",
-    ".agents/skills/unslop",
     ".agents/skills/ux-ui",
     ".claude/skills",
     ".claude/agents/reviewer.md",
