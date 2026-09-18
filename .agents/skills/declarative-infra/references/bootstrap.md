@@ -146,6 +146,26 @@ in {
     email = acmeEmail; # required: ACME registration contact
   };
 
+  systemd.services.podman-image-prune = {
+    description = "Remove unused container images older than seven days";
+    serviceConfig = {
+      Type = "oneshot";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+    script = ''
+      ${pkgs.podman}/bin/podman image prune --all --force --filter until=168h
+    '';
+  };
+  systemd.timers.podman-image-prune = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "daily";
+      Persistent = true;
+      RandomizedDelaySec = "30m";
+    };
+  };
+
   virtualisation.podman = {
     enable = true;
     defaultNetwork.settings.dns_enabled = true; # containers resolve each other by name
@@ -162,6 +182,9 @@ Beyond the module:
 
 - Only Caddy publishes services; nothing else opens 80/443, and every additional firewall port is a documented decision in the host repo.
 - Pin container images by digest.
+- Every Podman host needs image retention for production as well as previews. Daily image-only pruning of unused images created more than seven days ago is the default. Podman protects images referenced by any container, including stopped containers. Do not use `podman system prune`, volume pruning, or external-container removal as a substitute. Nix garbage collection and journal retention do not reclaim OCI images.
+- The age filter uses the image creation timestamp, not its pull or last-use time. Retired images may need to be pulled again for rollback; keep registry access available. Where a deployment or preview controller protects staged or rollback images beyond container references, coordinate cleanup with that controller or exclude its labels and retain its own collector. A preview-only collector does not replace production retention.
+- Verify the timer and a successful cleanup on each host after deployment. During a disk-full incident, check PostgreSQL recovery and every service sharing the filesystem after reclaiming unused images; never remove database files or volumes to make room.
 - A host running PostgreSQL also runs a local dump timer with retention (hourly `pg_dump --format=custom` into a `postgres`-owned directory is the norm); shape the unit however reads best.
 - A host running GitHub Actions jobs uses `services.github-runners.<name>` with a SOPS-provided token, `programs.nix-ld.enable = true` plus `NIX_LD`/`NIX_LD_LIBRARY_PATH` in the runner environment so downloaded tooling executes, and systemd resource caps (`CPUQuota`, `MemoryHigh`/`MemoryMax`) so jobs cannot starve the host's services.
 
@@ -267,7 +290,7 @@ A repo whose trusted CI builds and deploys NixOS system closures uses a private,
 
 A deploy that changes an app's image restarts `podman-<app>.service` in place: the old container stops before the new one starts, and Caddy has no upstream for that app until the new container is up. That brief interruption is the accepted default for this profile. The health readback in `image-promotion.md` verifies that the deploy completed; it does not keep the old container serving through the switch.
 
-Keep the window to container startup, not registry pull: after the deploy job's identity and registry-access checks and immediately before `nix run .#deploy-rs`, the workflow pre-pulls every gated image reference on the target over the deploy SSH connection. Set `REGISTRY_AUTH_FILE` and pass `--authfile` on every Podman registry command. Public entries use the root-owned empty `/run/containers/auth/anonymous.json`; private entries use only `/run/containers/auth/ghcr-private.json`, atomically created by the host's SOPS-backed `podman-ghcr-login` unit. Give every container unit the matching `REGISTRY_AUTH_FILE` too, so implicit pulls cannot fall back to ambient Podman or Docker auth. A private pre-pull always contacts the registry even when the digest is cached, so missing or expired credentials fail before activation; a public cached digest may skip its network pull after the drift detector has independently proved anonymous access. Pulling by digest is idempotent and additive, and any failed pre-pull fails the deploy before activation touches the running system.
+Keep the window to container startup, not registry pull: after the deploy job's identity and registry-access checks and immediately before `nix run .#deploy-rs`, the workflow pre-pulls every gated image reference on the target over the deploy SSH connection. Set `REGISTRY_AUTH_FILE` and pass `--authfile` on every Podman registry command. Public entries use the root-owned empty `/run/containers/auth/anonymous.json`; private entries use only `/run/containers/auth/ghcr-private.json`, atomically created by the host's SOPS-backed `podman-ghcr-login` unit. Give every container unit the matching `REGISTRY_AUTH_FILE` too, so implicit pulls cannot fall back to ambient Podman or Docker auth. A private pre-pull always contacts the registry even when the digest is cached, so missing or expired credentials fail before activation; a public cached digest may skip its network pull after the same deployment has independently proved anonymous access to that exact digest. Pulling by digest is idempotent and additive, and any failed pre-pull fails the deploy before activation touches the running system.
 
 Private-image migration and container units require and order after `podman-ghcr-login.service`. Public-image units must not depend on that service. The SOPS secret restarts the oneshot when its decrypted value changes. The unit reads `registry.github_token` through stdin, writes a same-directory `0600` temporary auth file, and atomically renames it to the private path only after `podman login` succeeds. The complete credential, two-stage adoption, auth-file, and rotation contract is in `image-promotion.md#private-ghcr-host-access`.
 

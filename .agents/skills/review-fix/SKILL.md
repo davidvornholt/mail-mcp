@@ -13,7 +13,7 @@ An explicit user choice wins. Otherwise use Claude Opus 5 at high effort in Clau
 
 ## Scope
 
-Read `.agents/review/decisions.md` when present. Post one scope comment with the intent, threat model, out-of-scope work, and selected lenses; its timestamp starts the cycle. Ask about splitting only when the PR contains independent product outcomes.
+Post one scope comment with the intent, threat model, out-of-scope work, and selected lenses; its timestamp starts the cycle. Ask about splitting only when the PR contains independent product outcomes.
 
 Choose distinct lenses:
 
@@ -35,18 +35,20 @@ Add a specialized lens only when a material risk such as authorization, persiste
 
 Reuse a successful equivalent exact-head gate. Otherwise run the repository gate once. Repair only PR-introduced mechanical failures before review and record pre-existing failures.
 
-Run `review-pass` over the PR base → initial head with the scope, gate result, decisions registry, lenses, and any model override. Retry a skipped lens once, then stop if coverage is still incomplete. Merge duplicate findings while preserving every reporting lens, and assign one decision:
+For every required review or verification lens, spawn a separate read-only subagent using the [review skill](../review/SKILL.md). `review-pass` is an optional workflow helper. If delegation is unavailable, report incomplete coverage and stop.
+
+Review the PR base → initial head with the scope, gate result, lenses, and any model override. Retry a skipped lens once, then stop if coverage is still incomplete. Merge duplicate findings while preserving every reporting lens, and assign one decision:
 
 - `block`: demonstrated, in scope, material under the threat model, and worth stopping the merge;
 - `defer`: real but outside this PR or below the merge bar;
 - `discard`: refuted, speculative, already accepted, or not worth scheduling;
 - `ask`: a costly, durable product or architecture choice remains unresolved.
 
-Do not ask about inferable implementation details, naming, local refactors, test shape, or other reversible choices. Choose the smallest sound option and record durable assumptions. Collect every unavoidable `ask` into one decision brief with the options, consequences, and a recommendation.
+Do not ask about inferable implementation details, naming, local refactors, test shape, or other reversible choices. Choose the smallest sound option. Collect every unavoidable `ask` into one decision brief with the options, consequences, and a recommendation.
 
 ## Fix
 
-Create one self-contained review thread per blocker. A worker reproduces the failure first, makes the smallest correction, and runs focused checks. If it cannot reproduce the failure, leave the thread unresolved and reclassify the finding instead of fixing it speculatively.
+Create one self-contained review thread per blocker. A worker subagent reproduces the failure first, makes the smallest correction, and runs focused checks. If it cannot reproduce the failure, leave the thread unresolved and reclassify the finding instead of fixing it speculatively.
 
 Add at most one regression test per failure class, preferably by extending existing or table-driven coverage. The test should fail on the pre-fix behavior when practical. Do not add a dependency, parser, fixture framework, generic harness, or shared guard for one finding. Use browser tests only for browser-specific behavior.
 
