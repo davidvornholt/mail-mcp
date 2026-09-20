@@ -15,7 +15,7 @@
     "mail": "bun run src/app/cli.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@napi-rs/keyring": "^1.3.0",
     "effect": "^3.21.4",
     "imapflow": "^1.4.7",
