@@ -15,20 +15,20 @@
     "mail": "bun run src/app/cli.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "@napi-rs/keyring": "^1.3.0",
-    "effect": "^3.21.4",
-    "imapflow": "^1.4.7",
-    "mailparser": "^3.9.14",
-    "nodemailer": "^9.0.3",
-    "zod": "^4.4.3"
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@napi-rs/keyring": "^2.1.0",
+    "effect": "^3.22.2",
+    "imapflow": "^2.0.7",
+    "mailparser": "^3.9.28",
+    "nodemailer": "^10.0.10",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@davidvornholt/typescript-config": "workspace:*",
-    "@types/bun": "^1.4.0",
+    "@types/bun": "^1.4.2",
     "@types/mailparser": "^3.4.6",
-    "@types/node": "^26.1.1",
-    "@types/nodemailer": "^8.0.1",
+    "@types/node": "^26.6.2",
+    "@types/nodemailer": "^8.0.2",
     "typescript": "7.0.2"
   }
 }

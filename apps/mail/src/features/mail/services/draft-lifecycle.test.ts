@@ -108,21 +108,30 @@ describe('replaceDraft', () => {
 });
 
 describe('removeDraft', () => {
-  it('fails with MessageNotFoundError when the target draft uid does not exist', async () => {
-    const client = {
-      list: () => Promise.resolve(draftFolders),
-      getMailboxLock: () => Promise.resolve({ release: () => undefined }),
-      fetchOne: () => Promise.resolve(false),
-      messageDelete: () => Promise.resolve(true),
-    } as unknown as ImapFlow;
+  it.each([false, undefined])(
+    'fails without deleting and releases the lock when the target draft is missing (%s)',
+    async (missing) => {
+      const events: Array<string> = [];
+      const client = {
+        list: () => Promise.resolve(draftFolders),
+        getMailboxLock: () =>
+          Promise.resolve({ release: () => events.push('release') }),
+        fetchOne: () => Promise.resolve(missing),
+        messageDelete: () => {
+          events.push('delete');
+          return Promise.resolve(true);
+        },
+      } as unknown as ImapFlow;
 
-    const missingUid = 999;
-    const error = await Effect.runPromise(
-      Effect.flip(removeDraft(client, 'Drafts', missingUid)),
-    );
+      const missingUid = 999;
+      const error = await Effect.runPromise(
+        Effect.flip(removeDraft(client, 'Drafts', missingUid)),
+      );
 
-    expect(error._tag).toBe('MessageNotFoundError');
-  });
+      expect(error._tag).toBe('MessageNotFoundError');
+      expect(events).toEqual(['release']);
+    },
+  );
 
   it('refuses to expunge, without deleting, when the folder uidValidity no longer matches the handle', async () => {
     const events: Array<string> = [];

@@ -167,3 +167,27 @@ describe('readAttachment download results', () => {
     expect(result.contentType).toBe('application/pdf');
   });
 });
+
+it.each([false, undefined])(
+  'handles a vanished attachment message (%s) and releases its lock',
+  async (missing) => {
+    const released = { value: false };
+    const client = {
+      getMailboxLock: mailboxLock(released),
+      fetchOne: () => Promise.resolve(missing),
+      download: () => {
+        throw new Error('missing message must not download');
+      },
+    } as unknown as ImapFlow;
+    const result = await Effect.runPromise(
+      Effect.either(
+        readAttachment(client, 'INBOX', messageUid, attachmentPart),
+      ),
+    );
+    expect(result).toMatchObject({
+      _tag: 'Left',
+      left: { _tag: 'MessageNotFoundError' },
+    });
+    expect(released.value).toBe(true);
+  },
+);

@@ -8,7 +8,7 @@ import {
 } from '../schemas/mail';
 
 export const isSearchScope = (value: string): value is SearchScope =>
-  searchScopes.some((scope) => scope === value);
+  (searchScopes as ReadonlyArray<string>).includes(value);
 
 type ValidationResult<Value, Error> =
   | { readonly _tag: 'valid'; readonly value: Value }

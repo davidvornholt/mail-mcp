@@ -106,7 +106,11 @@ export const readMessageContents = (
         ),
       catch: imapError('fetch message'),
     });
-    if (message === false || message.source === undefined) {
+    if (
+      message === false ||
+      message === undefined ||
+      message.source === undefined
+    ) {
       return yield* Effect.fail(
         new MessageNotFoundError({
           folder,

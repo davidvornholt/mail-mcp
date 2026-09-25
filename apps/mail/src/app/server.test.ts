@@ -102,10 +102,7 @@ it(
         properties: {
           uid: { type: 'integer', exclusiveMinimum: 0 },
           uidValidity: {
-            anyOf: expect.arrayContaining([
-              { type: 'string' },
-              { type: 'null' },
-            ]),
+            type: expect.arrayContaining(['string', 'null']),
           },
         },
       });
