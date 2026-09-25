@@ -1,9 +1,9 @@
 import process from 'node:process';
 import { Effect } from 'effect';
 
-const ENTER = new Set(['\n', '\r', '']);
-const BACKSPACE = new Set(['', '\b']);
-const CTRL_C = '';
+const ENTER = new Set(['\n', '\r', '\u0004']);
+const BACKSPACE = new Set(['\u007f', '\b']);
+const CTRL_C = '\u0003';
 
 export type HiddenPromptResult =
   | { readonly _tag: 'entered'; readonly value: string }
