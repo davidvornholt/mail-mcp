@@ -1,6 +1,6 @@
 {
   "upstream": "github:davidvornholt/standards",
-  "sha": "140bcc9d352a5d5641588cdd3ab0765450c135a3",
+  "sha": "c2c98a60040377e39d41a9f7020b558d23e5d27f",
   "files": {
     ".agents/skills/ci-pipelines/SKILL.md": "2b9acdddb838273af146f1aaaecaa0edbb9ca460da8bb32535fe06a74e7e2cba",
     ".agents/skills/database/agents/openai.yaml": "4c9f47df24219d5b195c88eef374431f64b453ed1ba057f50d4c11e4549343c1",
@@ -36,7 +36,7 @@
     ".github/dependabot.base.yml": "e1788d583b776fb48db87223f3ccf76f0364820a65996a011e9643f22ff0662b",
     ".github/settings.json": "a06b6aa69b27bf1c3b8ebf25d90131a9653f54bc1ec08384a92581627527911c",
     ".github/workflows/notify-pause.yml": "9161de206ddf0fe4d07fe561226d168a476cc027a396c43c691a43a7ee0386e1",
-    ".github/workflows/standards-sync.yml": "52159e73a89dc7af8509b32fedf861f9c38bf94822198412f7715844970d31b7",
+    ".github/workflows/standards-sync.yml": "c1f084854848692b3c1c271d06a09f08a38b66a747d7bbebc358fa481e16c5cd",
     ".github/workflows/standards.yml": "a891c6658c6c5aab264048c3aa6d7357ae0434659433ec3b6cef3e17727807e2",
     ".mise/config.toml": "650a919aa3f06f5dfe20a047250c84f7afbfcc8886862c4421c61e815d2fd3f6",
     "AGENTS.md": "000f74334978a797ca0265d5b0762eb23d70b7cb6f9dbcc09410495a314d0349",
