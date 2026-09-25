@@ -66,3 +66,29 @@ it.each(['campaign+eu', 'campaign/eu', 'launch=20+=20europe'])(
   },
   subprocessTimeoutMs,
 );
+
+// Unknown account would reach the mail service if validation allowed the keyword.
+it.each(['$SubmitPending', '$Submitted', '$submitpending', '$sUbMiTtEd'])(
+  'rejects the action-bearing keyword %s before reaching the mail service',
+  async (tagKey) => {
+    const client = await connectClient();
+    const result = await client.callTool({
+      name: 'tag_drafts',
+      arguments: {
+        drafts: [
+          {
+            account: 'unknown@example.com',
+            folder: 'Drafts',
+            uid: 1,
+            uidValidity: '111',
+          },
+        ],
+        tagKey,
+      },
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain('Input validation error');
+    expect(JSON.stringify(result.content)).not.toContain('Unknown account');
+  },
+  subprocessTimeoutMs,
+);
