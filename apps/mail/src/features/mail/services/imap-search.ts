@@ -66,7 +66,7 @@ const searchOneFolder = (
       try: () => client.search(buildSearchQuery(options), { uid: true }),
       catch: imapError(`search ${folder}`),
     });
-    const uids = found === false ? [] : found;
+    const uids = found === false || found === undefined ? [] : found;
     const selected = uids.slice(-options.limit).reverse();
     if (selected.length === 0) {
       return [];

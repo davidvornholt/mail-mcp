@@ -198,3 +198,29 @@ describe('readMessage reply attribution safety', () => {
     }
   });
 });
+
+describe('missing IMAP messages', () => {
+  it.each([false, undefined])(
+    'returns a typed missing-message error for %s',
+    async (missing) => {
+      let released = false;
+      const client = {
+        getMailboxLock: () =>
+          Promise.resolve({
+            release: () => {
+              released = true;
+            },
+          }),
+        fetchOne: () => Promise.resolve(missing),
+      } as unknown as ImapFlow;
+      const result = await Effect.runPromise(
+        Effect.either(readMessage(client, 'INBOX', messageUid)),
+      );
+      expect(result).toMatchObject({
+        _tag: 'Left',
+        left: { _tag: 'MessageNotFoundError' },
+      });
+      expect(released).toBe(true);
+    },
+  );
+});

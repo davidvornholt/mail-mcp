@@ -177,3 +177,25 @@ describe('searchMailboxes', () => {
     expect(hits.map(({ hit: { uid } }) => uid)).toEqual([2, 1]);
   });
 });
+
+it.each([false, undefined])(
+  'handles absent IMAP search results (%s) without fetching',
+  async (missing) => {
+    const events: Array<string> = [];
+    const client = fakeClient([], new Map(), events);
+    client.search = (() => Promise.resolve(missing)) as ImapFlow['search'];
+    client.fetch = () => {
+      throw new Error('empty search must not fetch');
+    };
+    const hits = await Effect.runPromise(
+      searchMailboxes(client, {
+        scope: 'folder',
+        folder: 'INBOX',
+        query: 'missing',
+        limit: 20,
+      }),
+    );
+    expect(hits).toEqual([]);
+    expect(events).toEqual(['lock:INBOX', 'release:INBOX']);
+  },
+);

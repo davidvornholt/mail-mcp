@@ -79,7 +79,7 @@ export const readAttachment = (
           message: `fetch attachment metadata failed: ${String(cause)}`,
         }),
     });
-    if (message === false) {
+    if (message === false || message === undefined) {
       return yield* Effect.fail(
         new MessageNotFoundError({
           folder,

@@ -14,7 +14,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # Preserve every push SHA needed by publication; only PR runs supersede one
+  # another when a newer commit updates the same PR.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -34,13 +36,10 @@ jobs:
   # Per-repo DB coordinates come from repository Actions VARIABLES (Settings →
   # Secrets and variables → Actions → Variables), not edits to this synced file:
   #   CI_POSTGRES_USER, CI_POSTGRES_PASSWORD, CI_POSTGRES_DB  (defaults below)
-  #   CI_RUNNER  — override only the unprivileged quality runner label when
-  #                CI_CODEBUILD_PROJECT is absent
   #   CI_CODEBUILD_PROJECT — in a sole-maintainer personal repository that
   #                trusts workflow edits before merge, select an ephemeral AWS
   #                CodeBuild runner for every compatible canonical consumer job;
-  #                this takes precedence over CI_RUNNER and adds the unique run
-  #                identity CodeBuild requires
+  #                the unique run identity prevents reuse across jobs
   #   CI_CODEBUILD_QUALITY_SIZE — override the CodeBuild quality job's instance
   #                size when a measured gate cannot run reliably on `medium`;
   #                compatible values are CodeBuild's runner size labels
@@ -56,7 +55,7 @@ jobs:
   # an `if:` whereas a service cannot. So gating it keeps one uniform file while
   # skipping a pointless download in repos with nothing to render.
   quality:
-    runs-on: ${{ vars.CI_CODEBUILD_PROJECT != '' && format('codebuild-{0}-{1}-{2}-{3}', vars.CI_CODEBUILD_PROJECT, github.run_id, github.run_attempt, vars.CI_CODEBUILD_QUALITY_SIZE || 'medium') || vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ${{ vars.CI_CODEBUILD_PROJECT != '' && format('codebuild-{0}-{1}-{2}-{3}', vars.CI_CODEBUILD_PROJECT, github.run_id, github.run_attempt, vars.CI_CODEBUILD_QUALITY_SIZE || 'medium') || 'ubuntu-latest' }}
     timeout-minutes: 30
     services:
       postgres:
@@ -151,7 +150,7 @@ jobs:
       - name: Install just
         uses: extractions/setup-just@v4
         with:
-          just-version: "1.57.0"
+          just-version: "1.58.0"
 
       - name: Detect browser a11y suite
         id: a11y
@@ -197,6 +196,9 @@ jobs:
         with:
           node-version: "26"
 
+      # Increment cache namespace generations whenever publication trust or
+      # restore semantics change, so immutable legacy snapshots cannot survive
+      # the cutover through an exact key hit or an old restore prefix.
       # PRs may restore the latest default-branch Turbo snapshot but never
       # publish cache state. A successful default-branch run saves at most one
       # pruned snapshot per commit, so reruns cannot duplicate an upload and PR
@@ -206,9 +208,9 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          key: turbo-trusted-v2-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-${{ runner.arch }}-
+            turbo-trusted-v2-${{ runner.os }}-${{ runner.arch }}-
 
       # Bun's package store and Playwright's browser store hold executable
       # content and live at their tool-default paths. The defaults matter
@@ -218,9 +220,9 @@ jobs:
       # a relocated store is invisible to exactly the processes that need it.
       # Trust comes from publication, not location: pull requests may restore
       # trusted snapshots but cannot publish; only a successful main run
-      # saves. A persistent self-hosted runner's user-level cache reuse is a
-      # property of that runner pool, tracked upstream, and is not fixable
-      # here without breaking the strict-env seam.
+      # saves. Quality always uses an ephemeral hosted or per-run CodeBuild
+      # runner; arbitrary persistent CI_RUNNER pools are unsupported so an
+      # earlier PR cannot leave executable state in the next run's defaults.
       #
       # Published Bun and Playwright snapshots must be history-free. A main
       # snapshot published after a lock change contains only what the current
@@ -230,8 +232,9 @@ jobs:
       # cannot identify browser families introduced by a newer release. Main
       # therefore restores both stores by exact lock key only: each conditional
       # `restore-keys` resolves to an empty string on main, which actions/cache
-      # treats as no fallback keys. An unchanged lock still exact-hits. After a
-      # lock change, the cold install runs against an empty store and the
+      # treats as no fallback keys. Primary keys can still prefix-match, so
+      # main discards every restore without cache-hit=true before installation.
+      # An unchanged lock still exact-hits. The cold install runs against an empty store and the
       # successful run publishes only that result. Pull requests keep prefix
       # fallbacks because they consume trusted snapshots but never publish.
       - name: Restore the Bun package cache
@@ -239,8 +242,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.bun/install/cache
-          key: bun-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ github.ref != 'refs/heads/main' && format('bun-packages-{0}-{1}-', runner.os, runner.arch) || '' }}
+          key: bun-packages-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && format('bun-packages-v2-{0}-{1}-', runner.os, runner.arch) || '' }}
+
+      - name: Discard non-exact main Bun restore
+        if: github.ref == 'refs/heads/main' && steps.bun-cache.outputs.cache-hit != 'true'
+        run: rm -rf -- "$HOME/.bun/install/cache"
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -257,8 +264,12 @@ jobs:
         uses: actions/cache/restore@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ github.ref != 'refs/heads/main' && format('playwright-{0}-{1}-', runner.os, runner.arch) || '' }}
+          key: playwright-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && format('playwright-v2-{0}-{1}-', runner.os, runner.arch) || '' }}
+
+      - name: Discard non-exact main Playwright restore
+        if: github.ref == 'refs/heads/main' && steps.a11y.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
+        run: rm -rf -- "$HOME/.cache/ms-playwright"
 
       - name: Install Playwright Chromium
         if: steps.a11y.outputs.present == 'true'
@@ -287,14 +298,14 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: ~/.bun/install/cache
-          key: bun-packages-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          key: bun-packages-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
 
       - name: Save the Playwright browser cache
         if: success() && github.ref == 'refs/heads/main' && steps.a11y.outputs.present == 'true' && steps.playwright-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v6
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
+          key: playwright-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('bun.lock') }}
 
       # Keep the newest artifacts within 2 GiB before the successful
       # default-branch save. Failed, cancelled, PR, and exact-key rerun jobs do
@@ -316,7 +327,7 @@ jobs:
         uses: actions/cache/save@v6
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
+          key: turbo-trusted-v2-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
 
   nix-discovery:
     if: github.repository == 'davidvornholt/standards'
@@ -432,8 +443,8 @@ jobs:
           echo "$standards_sha  $standards_archive" | sha512sum --check --quiet
           tar -xzf "$standards_archive" -C "$cli_root/package" --strip-components=1
 
-          yaml_version=2.9.0
-          yaml_sha=d80be1357de66fccdde99cbb20d4ed4a9975175e475ba5a7aa3d2cad696428b729625fe03083098b2b86ab629e236605c543e376507edcb735d2c78c2ed2f870
+          yaml_version=2.9.1
+          yaml_sha=dcdc4df3eefc39dcdb4fb0bf5a31acc9f3c0b4968ddc5343b16c6fed8ee6703b13fe83a6816f01a72410145067bd91378fd63649dcf550b14b7b32fb11bdb217
           yaml_archive="$RUNNER_TEMP/yaml.tgz"
           mkdir -p "$cli_root/node_modules/yaml"
           curl -sfLo "$yaml_archive" "https://registry.npmjs.org/yaml/-/yaml-${yaml_version}.tgz"
