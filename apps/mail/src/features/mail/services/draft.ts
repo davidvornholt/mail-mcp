@@ -65,7 +65,7 @@ const deleteDraftContents = (
           message: `look up draft uid ${uid} failed: ${String(cause)}`,
         }),
     });
-    if (existing === false) {
+    if (existing === false || existing === undefined) {
       return yield* Effect.fail(
         new MessageNotFoundError({
           folder,
