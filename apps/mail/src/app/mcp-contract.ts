@@ -139,9 +139,9 @@ export const deleteDraftFields = {
 } as const;
 
 // IMAP keywords use the visible ASCII atom grammar. Action-bearing keyword
-// policy is separate; broadening this grammar must not admit system flags.
+// policy rejects submission keywords case-insensitively; tagging must never send mail.
 const imapKeywordPattern =
-  /^(?!.*[\u0022\u0025\u0028-\u002a\u005c\u005d\u007b])[\u0021-\u007e]+$/u;
+  /^(?!\$(?:[Ss][Uu][Bb][Mm][Ii][Tt](?:[Pp][Ee][Nn][Dd][Ii][Nn][Gg]|[Tt][Ee][Dd]))$)(?!.*[\u0022\u0025\u0028-\u002a\u005c\u005d\u007b])[\u0021-\u007e]+$/u;
 
 export const tagDraftsFields = {
   drafts: z
@@ -158,7 +158,7 @@ export const tagDraftsFields = {
     .string()
     .regex(imapKeywordPattern)
     .describe(
-      'Thunderbird tag key or IMAP keyword, such as $label1 or welle=201.',
+      'Thunderbird tag key or inert IMAP keyword, such as $label1 or welle=201. Submission keywords are forbidden.',
     ),
 } as const;
 
