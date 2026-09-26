@@ -1,0 +1,77 @@
+import type { MessageStructureObject } from 'imapflow';
+import type { MessageAttachment } from '../schemas/mail';
+
+const parameter = (
+  parameters: Readonly<Record<string, string>> | undefined,
+  name: string,
+): string | undefined =>
+  Object.entries(parameters ?? {}).find(
+    ([key]) => key.toLowerCase() === name,
+  )?.[1];
+
+const toAttachment = (
+  node: MessageStructureObject,
+): MessageAttachment | undefined => {
+  const { part } = node;
+  const disposition = node.disposition?.toLowerCase() ?? null;
+  const filename =
+    parameter(node.dispositionParameters, 'filename') ??
+    parameter(node.parameters, 'name') ??
+    null;
+  const isMessageBody = ['text/plain', 'text/html', 'text/x-amp-html'].includes(
+    node.type.toLowerCase(),
+  );
+  const isAttachment =
+    disposition === 'attachment' ||
+    filename !== null ||
+    (node.id !== undefined && !isMessageBody);
+  if (part === undefined || !isAttachment) {
+    return;
+  }
+  return {
+    part,
+    filename,
+    contentType: node.type,
+    size: node.size ?? null,
+    disposition,
+    contentId: node.id ?? null,
+  };
+};
+
+export const listAttachments = (
+  structure: MessageStructureObject | undefined,
+): ReadonlyArray<MessageAttachment> => {
+  if (structure === undefined) {
+    return [];
+  }
+  const attachments: Array<MessageAttachment> = [];
+  const pending = [structure];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (node !== undefined) {
+      const attachment = toAttachment(node);
+      if (attachment === undefined) {
+        pending.push(...[...(node.childNodes ?? [])].reverse());
+      } else {
+        attachments.push(attachment);
+      }
+    }
+  }
+  return attachments;
+};
+
+export const findAttachment = (
+  structure: MessageStructureObject | undefined,
+  part: string,
+): MessageAttachment | undefined => {
+  const pending = structure === undefined ? [] : [structure];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (node?.part === part) {
+      return toAttachment(node);
+    }
+    if (node !== undefined) {
+      pending.push(...(node.childNodes ?? []));
+    }
+  }
+};

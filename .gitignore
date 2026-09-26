@@ -3,15 +3,13 @@ dist/
 .next/
 .turbo/
 *.log
+.direnv/
 
 # Local secrets: decrypted SOPS output must never be committed. The encrypted
 # CI target is tracked so GitHub Actions can decrypt it with SOPS_AGE_KEY.
 secrets/*.yaml
 !secrets/*.example.yaml
 !secrets/ci.yaml
-
-# Real account inventory: personal addresses/hosts stay out of git.
-apps/mail/accounts.toml
 
 # Agent scratch space (review-loop ledgers) and harness worktrees.
 .agents/tmp/
