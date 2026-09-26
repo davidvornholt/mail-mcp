@@ -1,0 +1,10 @@
+# Copy to ~/.config/mailbox/accounts.toml, then run: mailbox login
+# Passwords live in the OS keyring, not in this file.
+
+[[accounts]]
+email = "you@example.com"  # the address you pass to --account
+name = "Your Name"         # sender name on drafts
+host = "imap.example.com"  # IMAP server
+# port = 993               # default 993
+# secure = true            # implicit TLS; default true
+# user = "you@example.com" # IMAP login; defaults to email

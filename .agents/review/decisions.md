@@ -64,83 +64,37 @@ Entry format: `## <id> — <title>`, then Date, Decision, Rationale, Scope.
     implicit-invocation surface; peers (database, github-actions,
     standards-sync) retain theirs.
 
-## D-2026-07-11-sync-test-file-length-exception — sync-standards.test.ts over 200 lines is an accepted, documented exception
+## D-2026-07-11-attachment-paths — Draft attachments accept any readable local path
 
 - Date: 2026-07-11
-- Decision: `scripts/sync-standards.test.ts` (~232 lines) exceeding the
-  AGENTS.md 200-line guideline is accepted and recorded in
-  `docs/quality/no-excessive-lines-per-file-exceptions.md`.
-- Rationale: the file is bucket-1 canonical; broad behavioral coverage of one
-  boundary file is clearer as a single colocated test file, and the split/keep
-  decision belongs upstream, same as the engine itself.
-- Scope: do not re-report the file's length while the exceptions-doc entry
-  exists.
+- Decision: `mailbox draft save` and `draft update` attach any file the user can read through `--attach`, with no allowlist or size cap.
+- Rationale: The operator runs the command against their own accounts, and the agents that call it already have shell access to the same files. A prompt-injected email could steer an agent to attach a sensitive file to a draft, but a draft is never sent without the user's review.
+- Scope: Do not re-report unless mailbox is exposed to untrusted operators or gains a send operation.
 
-## Cluster B (mail draft lifecycle) — resolved decisions
+## D-2026-07-11-non-uidplus-expunge — Deleting a draft without UIDPLUS may expunge other deleted messages
 
-These four items were surfaced by the review loop as decisions rather than
-mechanical fixes. Resolved by the user on 2026-07-11.
-
-### O-1 — attachment file-path surface in the LLM-driven MCP server — ACCEPTED RISK
-
-- Finding: `save_draft`/`update_draft` accept an unconstrained local file `path`
-  as an attachment (`server.ts` `attachmentSchema.path: z.string()`), and
-  `buildMime` sets `disableUrlAccess: true` but not `disableFileAccess`. A
-  prompt-injected email body (which the model can read via `search_mail`/
-  `read_message`) can steer the model to attach any process-readable file
-  (`~/.ssh/id_rsa`, `/proc/self/environ`) and `save_draft` it to the account's
-  remote Drafts folder — an out-of-band exfiltration channel. No size cap.
-  Confirmed empirically (arbitrary paths compile into the MIME).
-- Decision: accepted risk. This is a single-user, local-only helper the operator
-  runs against their own accounts; path-based attachments are retained as-is. Do
-  not re-report. Revisit if the server is ever exposed to untrusted operators.
-
-### O-2 — non-UIDPLUS delete collaterally expunges other \Deleted messages — ACCEPTED RISK
-
-- Finding: on servers without UIDPLUS, imapflow's `messageDelete` falls back to
-  a plain `EXPUNGE`, removing every `\Deleted`-flagged message in the folder,
-  not just the target uid.
-- Decision: accepted risk (the target servers support UIDPLUS). Do not
-  re-report. Residual note only.
-
-### O-3 — UIDVALIDITY captured and verified before expunge — IMPLEMENTED
-
-- Fix: `appendDraft` now returns the APPENDUID `uidValidity` (serialized) on
-  `DraftLocation`; `update_draft`/`delete_draft` accept an optional
-  `uidValidity`, and `deleteDraft` compares it against the folder's current
-  `uidValidity` under the mailbox lock, failing with `StaleUidError` on a
-  mismatch (a reindexed mailbox) instead of expunging a possibly-different
-  message. Covered by tests in `draft-lifecycle.test.ts`.
-
-### O-4 — appended drafts marked \Seen — IMPLEMENTED
-
-- Fix: `appendDraft` now appends with `['\\Draft', '\\Seen']` so agent-saved
-  drafts do not surface as unread in the MUA.
+- Date: 2026-07-11
+- Decision: On servers without UIDPLUS, imapflow's `messageDelete` falls back to a plain `EXPUNGE`, which removes every `\Deleted` message in the drafts folder. This is accepted.
+- Rationale: The target servers support UIDPLUS.
+- Scope: Do not re-report.
 
 ## D-2026-07-17-omitted-search-account — Omitted account searches all configured accounts
 
 - Date: 2026-07-17
-- Decision: Omitting `account` from CLI or MCP search intentionally searches every configured account.
+- Decision: `mailbox search` without `--account` intentionally searches every configured account.
 - Rationale: The helper has a single-user local threat model, and one all-account search is the intended default.
 - Scope: Do not re-report the omitted-account fan-out unless the threat model or product decision changes.
-
-## D-2026-07-17-positional-search-break — Legacy positional search syntax is not preserved
-
-- Date: 2026-07-17
-- Decision: The old `mail search <email> <query...>` form is intentionally neither preserved nor detected; focused searches use `--account`.
-- Rationale: The accepted CLI break avoids a compatibility branch and legacy parsing bloat.
-- Scope: Do not re-report this compatibility break unless the decision changes.
 
 ## D-2026-07-17-uniform-search-response — Search responses uniformly use `{ hits, failures }`
 
 - Date: 2026-07-17
-- Decision: The `{ hits, failures }` wire response intentionally applies to all-account and explicit-account searches.
-- Rationale: A uniform response contract is preferred; the breaking wire/schema change is accepted.
-- Scope: Do not re-report this response-shape break unless the decision changes.
+- Decision: The `{ hits, failures }` output applies to all-account and single-account searches.
+- Rationale: One output shape is simpler for agents to handle.
+- Scope: Do not re-report unless the decision changes.
 
 ## D-2026-07-17-warm-cache-no-pool — Warm IMAP clients stay a simple single-flight Ref map; pool machinery rejected
 
 - Date: 2026-07-17
 - Decision: Bounded global search uses dedicated throwaway clients (`imap-client.ts`, `searchWithDedicatedClient`) and never touches the warm cache. The warm-client path stays a simple per-account single-flight `Ref<Map>` cache (`imap-warm-cache.ts`): one `Semaphore(1)` per account around cold opens, cache re-check inside the permit. Pool-style admission/convergence/stale-winner machinery (the former `imap-client-pool*` modules) is deliberately rejected for this single-user local tool, and hardening the cold-open path beyond `Semaphore(1)` is out of scope.
-- Rationale: The tool is a single-user local MCP server; the pool's winner admission and PubSub convergence solved races at a complexity cost that is not justified here. A stalled opener cannot hold a permit forever because makeClient's socketTimeout errors the connect.
+- Rationale: The tool is a single-user local command; the pool's winner admission and PubSub convergence solved races at a complexity cost that is not justified here. A stalled opener cannot hold a permit forever because makeClient's socketTimeout errors the connect.
 - Scope: Do not re-report the warm cache's simplicity (missing pooling, admission, convergence, or revalidation) as a finding unless the tool's threat or concurrency model changes.

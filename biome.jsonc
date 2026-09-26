@@ -9,10 +9,10 @@
   },
   "overrides": [
     {
-      // Terminal boundary: the hidden-input password prompt is the one place
-      // that needs Node's process/tty raw-mode APIs to disable echo. App code
+      // Terminal boundary: the hidden password prompt needs Node's raw-mode
+      // APIs to disable echo, and TTY detection has no Bun equivalent. App code
       // otherwise must not import Node built-ins.
-      "includes": ["apps/mail/src/shared/terminal.ts"],
+      "includes": ["apps/cli/src/shared/terminal.ts"],
       "linter": {
         "rules": {
           "correctness": {
@@ -22,27 +22,13 @@
       }
     },
     {
-      // CLI entrypoint: exits non-zero on failure so scripts can rely on the
-      // exit code, which needs node:process. App code otherwise must not
-      // import Node built-ins.
-      "includes": ["apps/mail/src/app/cli.ts"],
+      // CLI entrypoint: sets the exit code and writes stdout/stderr through
+      // node:process. App code otherwise must not import Node built-ins.
+      "includes": ["apps/cli/src/app/cli.ts"],
       "linter": {
         "rules": {
           "correctness": {
             "noNodejsModules": "off"
-          }
-        }
-      }
-    },
-    {
-      // The MCP SDK exposes its entrypoints through a package.json "exports" map
-      // with .js subpaths that Biome's module resolver does not follow; tsc and
-      // Bun both resolve them correctly.
-      "includes": ["apps/mail/src/app/server.ts"],
-      "linter": {
-        "rules": {
-          "correctness": {
-            "noUnresolvedImports": "off"
           }
         }
       }

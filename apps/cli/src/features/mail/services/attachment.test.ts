@@ -1,0 +1,155 @@
+import { describe, expect, it } from 'bun:test';
+import { Effect } from 'effect';
+import type { ImapFlow, MessageStructureObject } from 'imapflow';
+import { readAttachment } from './attachment';
+
+const messageUid = 42;
+const attachmentPart = '2';
+const pdfContent = 'pdf bytes';
+const largeSize = 50_000_000;
+const attachmentStructure: MessageStructureObject = {
+  type: 'multipart/mixed',
+  childNodes: [
+    {
+      part: attachmentPart,
+      type: 'application/pdf',
+      encoding: 'base64',
+      disposition: 'attachment',
+      dispositionParameters: { filename: 'invoice.pdf' },
+      size: largeSize,
+    },
+  ],
+};
+
+const mailboxLock = (released: { value: boolean }) => () =>
+  Promise.resolve({
+    release: () => {
+      released.value = true;
+    },
+  });
+
+describe('readAttachment', () => {
+  it('downloads only the selected decoded body part, whatever its size', async () => {
+    const released = { value: false };
+    const calls: Array<ReadonlyArray<unknown>> = [];
+    const client = {
+      getMailboxLock: mailboxLock(released),
+      fetchOne: () =>
+        Promise.resolve({
+          uid: messageUid,
+          bodyStructure: attachmentStructure,
+        }),
+      download: (...args: ReadonlyArray<unknown>) => {
+        calls.push(args);
+        return Promise.resolve({
+          meta: {
+            expectedSize: 10_000_000,
+            contentType: 'application/pdf',
+            filename: 'invoice.pdf',
+          },
+          content: new Blob([pdfContent]).stream(),
+        });
+      },
+    } as unknown as ImapFlow;
+
+    const result = await Effect.runPromise(
+      readAttachment(client, 'INBOX', messageUid, attachmentPart),
+    );
+
+    expect(calls).toEqual([
+      [String(messageUid), attachmentPart, { uid: true }],
+    ]);
+    expect(Buffer.from(result.content).toString()).toBe(pdfContent);
+    expect(result.size).toBe(Buffer.byteLength(pdfContent));
+    expect(released.value).toBe(true);
+  });
+
+  it('rejects an unknown part before downloading', async () => {
+    let downloads = 0;
+    const client = {
+      getMailboxLock: mailboxLock({ value: false }),
+      fetchOne: () =>
+        Promise.resolve({
+          uid: messageUid,
+          bodyStructure: attachmentStructure,
+        }),
+      download: () => {
+        downloads += 1;
+        return Promise.resolve({});
+      },
+    } as unknown as ImapFlow;
+
+    const missing = await Effect.runPromise(
+      Effect.flip(readAttachment(client, 'INBOX', messageUid, '9')),
+    );
+
+    expect(missing._tag).toBe('AttachmentNotFoundError');
+    expect(downloads).toBe(0);
+  });
+});
+
+describe('readAttachment download results', () => {
+  it('reports a missing attachment when ImapFlow returns no download', async () => {
+    const client = {
+      getMailboxLock: mailboxLock({ value: false }),
+      fetchOne: () =>
+        Promise.resolve({
+          uid: messageUid,
+          bodyStructure: attachmentStructure,
+        }),
+      download: () => Promise.resolve({}),
+    } as unknown as ImapFlow;
+
+    const error = await Effect.runPromise(
+      Effect.flip(readAttachment(client, 'INBOX', messageUid, attachmentPart)),
+    );
+
+    expect(error._tag).toBe('AttachmentNotFoundError');
+  });
+
+  it('keeps the BODYSTRUCTURE type when downloaded MIME headers omit it', async () => {
+    const client = {
+      getMailboxLock: mailboxLock({ value: false }),
+      fetchOne: () =>
+        Promise.resolve({
+          uid: messageUid,
+          bodyStructure: attachmentStructure,
+        }),
+      download: () =>
+        Promise.resolve({
+          meta: { expectedSize: Buffer.byteLength(pdfContent) },
+          content: new Blob([pdfContent]).stream(),
+        }),
+    } as unknown as ImapFlow;
+
+    const result = await Effect.runPromise(
+      readAttachment(client, 'INBOX', messageUid, attachmentPart),
+    );
+
+    expect(result.contentType).toBe('application/pdf');
+  });
+});
+
+it.each([false, undefined])(
+  'handles a vanished attachment message (%s) and releases its lock',
+  async (missing) => {
+    const released = { value: false };
+    const client = {
+      getMailboxLock: mailboxLock(released),
+      fetchOne: () => Promise.resolve(missing),
+      download: () => {
+        throw new Error('missing message must not download');
+      },
+    } as unknown as ImapFlow;
+    const result = await Effect.runPromise(
+      Effect.either(
+        readAttachment(client, 'INBOX', messageUid, attachmentPart),
+      ),
+    );
+    expect(result).toMatchObject({
+      _tag: 'Left',
+      left: { _tag: 'MessageNotFoundError' },
+    });
+    expect(released.value).toBe(true);
+  },
+);
